@@ -103,10 +103,12 @@ async function loadModule() {
 
 describe('IPC Handlers', () => {
   const originalWarn = console.warn
-
+  let uncaughtListenerCount = 0
   beforeEach(() => {
     vi.clearAllMocks()
     vi.resetModules()
+    process.setMaxListeners(20)
+    uncaughtListenerCount = process.listenerCount('uncaughtException')
 
     // Replace console.warn to suppress vitest internal warnings
     // We restore it in afterEach
@@ -126,6 +128,10 @@ describe('IPC Handlers', () => {
   })
 
   afterEach(() => {
+    // Trim uncaughtException listeners added by module re-import
+    while (process.listenerCount('uncaughtException') > uncaughtListenerCount) {
+      process.removeListener('uncaughtException', process.listeners('uncaughtException').pop())
+    }
     console.warn = originalWarn
   })
 
