@@ -3,6 +3,11 @@ import { escapeHtml, encodePathURI, purifyCSS, delay } from './utils.js';
 import { createAudioManager } from './classes/audiofx.class.js';
 import { createKeyboard } from './classes/keyboard.class.js';
 import { Modal } from './classes/modal.class.js';
+import { Clock } from './classes/clock.class.js';
+import { Sysinfo } from './classes/sysinfo.class.js';
+import { HardwareInspector } from './classes/hardwareInspector.class.js';
+import { Cpuinfo } from './classes/cpuinfo.class.js';
+import { RAMwatcher } from './classes/ramwatcher.class.js';
 
 // CSS imports (Vite injects as <style> tags)
 import '../assets/css/augmented.css';

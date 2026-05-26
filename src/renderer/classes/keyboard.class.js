@@ -512,7 +512,7 @@ export class Keyboard {
         }
 
         if (window.keyboard.linkedToTerm) {
-            window.term[window.currentTerm].write(cmd);
+            if (window.term[window.currentTerm]) window.term[window.currentTerm].write(cmd);
         } else {
             let isDelete = false;
             if (typeof document.activeElement.value !== "undefined") {
