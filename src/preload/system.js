@@ -10,5 +10,7 @@ export const systemAPI = {
   getNetworkInterfaces: () => ipcRenderer.invoke('getNetworkInterfaces'),
   getNetworkStats: (iface) => ipcRenderer.invoke('getNetworkStats', iface),
   getBlockDevices: () => ipcRenderer.invoke('getBlockDevices'),
-  getFsSize: () => ipcRenderer.invoke('getFsSize')
+  getFsSize: () => ipcRenderer.invoke('getFsSize'),
+  getSystemInfo: () => ipcRenderer.invoke('getSystemInfo'),
+  getChassisInfo: () => ipcRenderer.invoke('getChassisInfo')
 }

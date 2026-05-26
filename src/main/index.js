@@ -273,6 +273,8 @@ ipcMain.handle('getNetworkInterfaces', () => si.networkInterfaces())
 ipcMain.handle('getNetworkStats', (_event, iface) => si.networkStats(iface))
 ipcMain.handle('getBlockDevices', () => si.blockDevices())
 ipcMain.handle('getFsSize', () => si.fsSize())
+ipcMain.handle('getSystemInfo', () => si.system())
+ipcMain.handle('getChassisInfo', () => si.chassis())
 
 // --- Terminal PTY management ---
 const terminals = new Map()

@@ -82,6 +82,7 @@ vi.mock('systeminformation', () => ({
     cpuTemperature: vi.fn(), processes: vi.fn(), battery: vi.fn(),
     networkInterfaces: vi.fn(), networkStats: vi.fn(),
     blockDevices: vi.fn(), fsSize: vi.fn(),
+    system: vi.fn(), chassis: vi.fn(),
   },
 }))
 vi.mock('../../src/main/terminal.js', () => ({ TerminalSession: vi.fn() }))
@@ -316,6 +317,33 @@ describe('IPC Handlers', () => {
       mockReaddirSync.mockImplementation(function () { throw err })
 
       await expect(readdir({}, '/some/path')).rejects.toThrow('weird error')
+    })
+  })
+  describe('system information handlers', () => {
+    it('getSystemInfo handler returns si.system() result', async () => {
+      const si = (await import('systeminformation')).default
+      const mockSystem = { manufacturer: 'Dell', model: 'XPS 15', serial: 'ABC123', uuid: 'test-uuid', sku: 'SKU-001' }
+      si.system.mockResolvedValue(mockSystem)
+
+      await loadModule()
+      const handler = getHandler('getSystemInfo')
+      const result = await handler()
+
+      expect(si.system).toHaveBeenCalled()
+      expect(result).toEqual(mockSystem)
+    })
+
+    it('getChassisInfo handler returns si.chassis() result', async () => {
+      const si = (await import('systeminformation')).default
+      const mockChassis = { manufacturer: 'Dell', model: 'XPS 15', type: 'Notebook' }
+      si.chassis.mockResolvedValue(mockChassis)
+
+      await loadModule()
+      const handler = getHandler('getChassisInfo')
+      const result = await handler()
+
+      expect(si.chassis).toHaveBeenCalled()
+      expect(result).toEqual(mockChassis)
     })
   })
 })
