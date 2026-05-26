@@ -186,6 +186,7 @@ class FilesystemDisplay {
 
             await new Promise((resolve, reject) => {
                 if (!content || content.length === 0) { resolve(); return; }
+                content = content.filter(f => f && f.trim() !== '');
 
                 let completed = 0;
                 content.forEach(async (file, i) => {
@@ -209,7 +210,7 @@ class FilesystemDisplay {
                         hidden: false
                     };
 
-                    if (typeof fstat !== "undefined") {
+                    if (fstat != null) {
                         e.lastAccessed = fstat.mtime ? new Date(fstat.mtime).getTime() : 0;
 
                         if (fstat.isDirectory) {

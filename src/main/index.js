@@ -218,8 +218,14 @@ ipcMain.handle('readdir', async (_event, dirPath) => {
 })
 
 ipcMain.handle('stat', async (_event, filePath) => {
-  const stat = lstatSync(filePath)
-  return { isFile: stat.isFile(), isDirectory: stat.isDirectory(), isSymbolicLink: stat.isSymbolicLink(), size: stat.size, mtime: stat.mtime.getTime() }
+  if (!filePath) return null
+  try {
+    const stat = lstatSync(filePath)
+    return { isFile: stat.isFile(), isDirectory: stat.isDirectory(), isSymbolicLink: stat.isSymbolicLink(), size: stat.size, mtime: stat.mtime.getTime() }
+  } catch (e) {
+    if (e.code === 'ENOENT' || e.code === 'EPERM' || e.code === 'EBUSY') return null
+    throw e
+  }
 })
 
 ipcMain.handle('readFile', async (_event, filePath, encoding) => {
