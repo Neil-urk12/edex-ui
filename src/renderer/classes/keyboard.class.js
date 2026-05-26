@@ -135,7 +135,7 @@ export class Keyboard {
                             key.setAttribute("class", "keyboard_key active keyboard_enter");
                         });
 
-                        if (window.keyboard.linkedToTerm) window.term[window.currentTerm].term.focus();
+                        if (window.keyboard.linkedToTerm && window.term[window.currentTerm]) window.term[window.currentTerm].term.focus();
                         if (this.container.dataset.passwordMode == "false")
                             window.audioManager.granted.play();
                         e.preventDefault();
@@ -175,7 +175,7 @@ export class Keyboard {
                             this.pressKey(key);
                         }
 
-                        if (window.keyboard.linkedToTerm) window.term[window.currentTerm].term.focus();
+                        if (window.keyboard.linkedToTerm && window.term[window.currentTerm]) window.term[window.currentTerm].term.focus();
                         if (this.container.dataset.passwordMode == "false")
                             window.audioManager.stdin.play();
                         e.preventDefault();
@@ -375,7 +375,7 @@ export class Keyboard {
                     shortcutsTriggered = true;
                 } else if (cut.type === "shell") {
                     let fn = (cut.linebreak) ? "writelr" : "write";
-                    window.term[window.currentTerm][fn](cut.action);
+                    if (window.term[window.currentTerm]) window.term[window.currentTerm][fn](cut.action);
                 } else {
                     console.warn(`${cut.trigger} has unknown type`);
                 }
@@ -504,7 +504,7 @@ export class Keyboard {
 
         if (cmd === "\n") {
             if (window.keyboard.linkedToTerm) {
-                window.term[window.currentTerm].writelr("");
+                if (window.term[window.currentTerm]) window.term[window.currentTerm].writelr("");
             } else {
                 document.activeElement.dispatchEvent(new CustomEvent("change", { detail: "enter" }));
             }
