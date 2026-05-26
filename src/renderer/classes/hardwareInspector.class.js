@@ -2,7 +2,7 @@
 export class HardwareInspector {
     constructor(parentId) {
         if (!parentId) throw new Error("Missing parameters");
-
+        this._updating = false;
         this.parent = document.getElementById(parentId);
         this._element = document.createElement("div");
         this._element.setAttribute("id", "mod_hardwareInspector");
@@ -28,19 +28,24 @@ export class HardwareInspector {
     }
 
     updateInfo() {
+        if (this._updating) return;
+        this._updating = true;
         Promise.all([
             window.electronAPI.getSystemInfo(),
             window.electronAPI.getChassisInfo()
         ]).then(([data, chassisData]) => {
-            document.getElementById("mod_hardwareInspector_manufacturer").innerText = this._trimDataString(data.manufacturer);
-            document.getElementById("mod_hardwareInspector_model").innerText = this._trimDataString(data.model, data.manufacturer, chassisData.type);
-            document.getElementById("mod_hardwareInspector_chassis").innerText = chassisData.type;
-        }).catch(err => console.warn('[HardwareInspector]', err));
+            const elManufacturer = document.getElementById("mod_hardwareInspector_manufacturer");
+            if (elManufacturer) elManufacturer.innerText = this._trimDataString(data.manufacturer);
+            const elModel = document.getElementById("mod_hardwareInspector_model");
+            if (elModel) elModel.innerText = this._trimDataString(data.model, data.manufacturer, chassisData.type);
+            const elChassis = document.getElementById("mod_hardwareInspector_chassis");
+            if (elChassis) elChassis.innerText = chassisData.type;
+            this._updating = false;
+        }).catch(err => { console.warn('[HardwareInspector]', err); this._updating = false; });
     }
 
     _trimDataString(str, ...filters) {
         if (!str) return "";
-        filters = [...filters];
         let result = str.trim();
         if (result === "") return "";
 

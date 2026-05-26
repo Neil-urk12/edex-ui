@@ -114,7 +114,7 @@ describe('Cpuinfo', () => {
             expect(mockElectronAPI.getProcesses).toHaveBeenCalled();
         });
 
-        it('sanitizes dynamic CPU name to prevent HTML injection via innerHTML', async () => {
+        it('uses textContent for CPU name, proving raw HTML appears as text not parsed DOM', async () => {
             mockElectronAPI.getCpuInfo.mockResolvedValue({
                 cores: 4,
                 manufacturer: '<script>alert(1)</script>',
@@ -126,10 +126,13 @@ describe('Cpuinfo', () => {
             const cpuinfo = new Cpuinfo('test-parent');
             await vi.advanceTimersByTimeAsync(0); // let getCpuInfo resolve
 
-            const innerContainer = document.getElementById('mod_cpuinfo_innercontainer');
-            expect(innerContainer).toBeTruthy();
-            // The <script> tag must NOT appear as executable HTML — it should be escaped
-            expect(innerContainer.innerHTML).not.toContain('<script>');
+            // Verify the <i id="mod_cpuinfo_cputitle"> element directly
+            const titleElement = document.getElementById('mod_cpuinfo_cputitle');
+            expect(titleElement).toBeTruthy();
+            // textContent returns the raw string — <script> tag appears as literal text, not parsed HTML
+            // This proves textContent was used: if innerHTML were used, the script tag would be
+            // parsed and stripped from textContent
+            expect(titleElement.textContent).toContain('<script>alert(1)</script>');
         });
 
         it('uses integer halfCores for odd core counts', async () => {
@@ -148,6 +151,38 @@ describe('Cpuinfo', () => {
             const innerContainer = document.getElementById('mod_cpuinfo_innercontainer');
             expect(innerContainer.innerHTML).toContain('# <em>1</em> - <em>2</em>');
             expect(innerContainer.innerHTML).toContain('# <em>3</em> - <em>5</em>');
+        });
+
+        it('resets guard flags when getCpuInfo rejects so polling can recover', async () => {
+            mockElectronAPI.getCpuInfo.mockRejectedValue(new Error('IPC failed'));
+
+            const cpuinfo = new Cpuinfo('test-parent');
+            await vi.advanceTimersByTimeAsync(0); // let getCpuInfo reject
+
+            // Guard flags should be reset to false after rejection
+            expect(cpuinfo.currentlyUpdating).toBe(false);
+            expect(cpuinfo.updatingCPUspeed).toBe(false);
+            expect(cpuinfo.updatingCPUtasks).toBe(false);
+        });
+    });
+
+    describe('_resetGuardFlags', () => {
+        it('resets all guard flags to false', async () => {
+            const cpuinfo = new Cpuinfo('test-parent');
+            await vi.advanceTimersByTimeAsync(0);
+
+            // Set all flags to true
+            cpuinfo.currentlyUpdating = true;
+            cpuinfo.updatingCPUspeed = true;
+            cpuinfo.updatingCPUtasks = true;
+            cpuinfo.updatingCPUtemp = true;
+
+            cpuinfo._resetGuardFlags();
+
+            expect(cpuinfo.currentlyUpdating).toBe(false);
+            expect(cpuinfo.updatingCPUspeed).toBe(false);
+            expect(cpuinfo.updatingCPUtasks).toBe(false);
+            expect(cpuinfo.updatingCPUtemp).toBe(false);
         });
     });
 
@@ -227,6 +262,7 @@ describe('Cpuinfo', () => {
     describe('updateCPUtemp', () => {
         it('calls window.electronAPI.getCpuTemperature()', async () => {
             const cpuinfo = new Cpuinfo('test-parent');
+            await vi.advanceTimersByTimeAsync(0); // let init resolve
             await cpuinfo.updateCPUtemp();
             expect(mockElectronAPI.getCpuTemperature).toHaveBeenCalled();
         });
@@ -235,11 +271,25 @@ describe('Cpuinfo', () => {
             mockElectronAPI.getCpuTemperature.mockResolvedValue({ max: 65 });
 
             const cpuinfo = new Cpuinfo('test-parent');
+            await vi.advanceTimersByTimeAsync(0); // let init resolve
             await cpuinfo.updateCPUtemp();
 
             const tempElement = document.getElementById('mod_cpuinfo_temp');
             expect(tempElement).toBeTruthy();
             expect(tempElement.innerText).toBe('65°C');
+        });
+
+        it('guards against concurrent temperature updates', async () => {
+            const cpuinfo = new Cpuinfo('test-parent');
+            await vi.advanceTimersByTimeAsync(0); // let init resolve
+
+            // Manually set the guard flag
+            cpuinfo.updatingCPUtemp = true;
+
+            await cpuinfo.updateCPUtemp();
+            // Should NOT have called the API since guard was set
+            // getCpuTemperature is NOT called during init. So count should be 0.
+            expect(mockElectronAPI.getCpuTemperature).not.toHaveBeenCalled();
         });
     });
 
@@ -338,6 +388,18 @@ describe('Cpuinfo', () => {
             // Should not throw
             cpuinfo.updateCPUtemp();
             await vi.advanceTimersByTimeAsync(0);
+        });
+
+        it('resets updatingCPUtemp when getCpuTemperature rejects', async () => {
+            mockElectronAPI.getCpuTemperature.mockRejectedValue(new Error('IPC failed'));
+
+            const cpuinfo = new Cpuinfo('test-parent');
+            await vi.advanceTimersByTimeAsync(0);
+
+            cpuinfo.updateCPUtemp();
+            await vi.advanceTimersByTimeAsync(0);
+
+            expect(cpuinfo.updatingCPUtemp).toBe(false);
         });
     });
 

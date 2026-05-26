@@ -156,6 +156,66 @@ describe('HardwareInspector.updateInfo', () => {
         const freshInstance = new HardwareInspector('test-parent')
         await expect(vi.advanceTimersByTimeAsync(0)).resolves.not.toThrow()
     })
+
+    it('skips updateInfo call when previous Promise.all is still pending', async () => {
+        let resolveFirst;
+        mockGetSystemInfo.mockImplementationOnce(() => new Promise(r => { resolveFirst = r; }));
+        mockGetChassisInfo.mockResolvedValue({ type: 'Laptop' });
+        mockGetSystemInfo.mockClear();
+        mockGetChassisInfo.mockClear();
+
+        const instance = new HardwareInspector('test-parent');
+        // First updateInfo() is called in constructor — Promise.all is now pending
+
+        // Trigger second updateInfo while first is still pending
+        instance.updateInfo();
+
+        // Only ONE getSystemInfo call should have been made (the constructor's)
+        expect(mockGetSystemInfo).toHaveBeenCalledTimes(1);
+
+        // Resolve the first call
+        resolveFirst({ manufacturer: 'Dell', model: 'XPS' });
+        await vi.advanceTimersByTimeAsync(0);
+
+        // Now a third call should work
+        mockGetSystemInfo.mockResolvedValue({ manufacturer: 'HP', model: 'EliteBook' });
+        mockGetChassisInfo.mockResolvedValue({ type: 'Desktop' });
+        instance.updateInfo();
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(mockGetSystemInfo).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not throw when DOM elements are removed between IPC call and resolution', async () => {
+        // Remove the instance from beforeEach to avoid duplicate DOM IDs
+        document.getElementById('test-parent').innerHTML = '';
+
+        // Clear call history from beforeEach's updateInfo
+        mockGetSystemInfo.mockClear();
+        mockGetChassisInfo.mockClear();
+
+        // Use deferred promise to control when getSystemInfo resolves
+        let resolveSystem;
+        mockGetSystemInfo.mockImplementationOnce(() => new Promise(r => { resolveSystem = r; }));
+        mockGetChassisInfo.mockResolvedValue({ type: 'Laptop' });
+
+        const warnSpy = vi.spyOn(console, 'warn');
+
+        const instance = new HardwareInspector('test-parent');
+        // Constructor calls updateInfo(), Promise.all is now pending
+
+        // Remove ALL DOM elements (cleanup simulation)
+        document.getElementById('test-parent').innerHTML = '';
+
+        // Now resolve the pending IPC call
+        resolveSystem({ manufacturer: 'Dell', model: 'XPS' });
+        await vi.advanceTimersByTimeAsync(0);
+
+        // Should NOT have thrown — the null-checks should silently skip
+        expect(instance._updating).toBe(false);
+        // Should not have logged a warning — null-checks prevent the error
+        expect(warnSpy).not.toHaveBeenCalled();
+    });
 })
 
 // ---------------------------------------------------------------------------

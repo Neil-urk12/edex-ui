@@ -46,10 +46,8 @@ export class Cpuinfo {
             this.tempUpdater = setInterval(() => { this.updateCPUtemp(); }, 2000);
             this.speedUpdater = setInterval(() => { this.updateCPUspeed(); }, 1000);
             this.tasksUpdater = setInterval(() => { this.updateCPUtasks(); }, 5000);
-                this.currentlyUpdating = false;
-                this.updatingCPUspeed = false;
-                this.updatingCPUtasks = false;
-        }).catch(err => console.warn('[Cpuinfo] init failed:', err));
+            this._resetGuardFlags();
+        }).catch(err => { console.warn('[Cpuinfo] init failed:', err); this._resetGuardFlags(); });
 
         this.parent.append(this.container);
 
@@ -57,6 +55,7 @@ export class Cpuinfo {
         this.currentlyUpdating = true;
         this.updatingCPUspeed = true;
         this.updatingCPUtasks = true;
+        this.updatingCPUtemp = true;
     }
 
     updateCPUload() {
@@ -68,8 +67,10 @@ export class Cpuinfo {
             const secondHalf = data.cpus.slice(half);
             const avg0 = firstHalf.length > 0 ? Math.round(firstHalf.reduce((sum, c) => sum + c.load, 0) / firstHalf.length) : 0;
             const avg1 = secondHalf.length > 0 ? Math.round(secondHalf.reduce((sum, c) => sum + c.load, 0) / secondHalf.length) : 0;
-            document.getElementById("mod_cpuinfo_usagecounter0").innerText = `Avg. ${avg0}%`;
-            document.getElementById("mod_cpuinfo_usagecounter1").innerText = `Avg. ${avg1}%`;
+            const el0 = document.getElementById("mod_cpuinfo_usagecounter0");
+            if (el0) el0.innerText = `Avg. ${avg0}%`;
+            const el1 = document.getElementById("mod_cpuinfo_usagecounter1");
+            if (el1) el1.innerText = `Avg. ${avg1}%`;
             this.currentlyUpdating = false;
         }).catch((err) => {
             console.warn('[Cpuinfo] getCpuLoad failed:', err);
@@ -78,17 +79,26 @@ export class Cpuinfo {
     }
 
     updateCPUtemp() {
+        if (this.updatingCPUtemp) return;
+        this.updatingCPUtemp = true;
         window.electronAPI.getCpuTemperature().then(data => {
-            document.getElementById("mod_cpuinfo_temp").innerText = `${data.max}°C`;
-        }).catch((err) => console.warn('[Cpuinfo] getCpuTemperature failed:', err));
+            const el = document.getElementById("mod_cpuinfo_temp");
+            if (el) el.innerText = `${data.max}°C`;
+            this.updatingCPUtemp = false;
+        }).catch((err) => {
+            console.warn('[Cpuinfo] getCpuTemperature failed:', err);
+            this.updatingCPUtemp = false;
+        });
     }
 
     updateCPUspeed() {
         if (this.updatingCPUspeed) return;
         this.updatingCPUspeed = true;
         window.electronAPI.getCpuInfo().then(data => {
-            document.getElementById("mod_cpuinfo_speed_min").innerText = `${data.speed}GHz`;
-            document.getElementById("mod_cpuinfo_speed_max").innerText = `${data.speedMax}GHz`;
+            const elMin = document.getElementById("mod_cpuinfo_speed_min");
+            if (elMin) elMin.innerText = `${data.speed}GHz`;
+            const elMax = document.getElementById("mod_cpuinfo_speed_max");
+            if (elMax) elMax.innerText = `${data.speedMax}GHz`;
             this.updatingCPUspeed = false;
         }).catch((err) => {
             console.warn('[Cpuinfo] getCpuInfo failed:', err);
@@ -100,7 +110,8 @@ export class Cpuinfo {
         if (this.updatingCPUtasks) return;
         this.updatingCPUtasks = true;
         window.electronAPI.getProcesses().then(data => {
-            document.getElementById("mod_cpuinfo_tasks").innerText = `${data.all}`;
+            const el = document.getElementById("mod_cpuinfo_tasks");
+            if (el) el.innerText = `${data.all}`;
             this.updatingCPUtasks = false;
         }).catch((err) => {
             console.warn('[Cpuinfo] getProcesses failed:', err);
@@ -108,7 +119,15 @@ export class Cpuinfo {
         });
     }
 
+    _resetGuardFlags() {
+        this.currentlyUpdating = false;
+        this.updatingCPUspeed = false;
+        this.updatingCPUtasks = false;
+        this.updatingCPUtemp = false;
+    }
+
     cleanup() {
+        this._resetGuardFlags();
         clearInterval(this.loadUpdater);
         clearInterval(this.tempUpdater);
         clearInterval(this.speedUpdater);
