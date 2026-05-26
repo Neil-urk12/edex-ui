@@ -38,3 +38,5 @@ window._escapeHtml = escapeHtml;
 window._encodePathURI = encodePathURI;
 window._purifyCSS = purifyCSS;
 window._delay = delay;
+
+export { escapeHtml as _escapeHtml, encodePathURI as _encodePathURI, purifyCSS as _purifyCSS, delay as _delay };

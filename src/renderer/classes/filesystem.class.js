@@ -785,9 +785,6 @@ class FilesystemDisplay {
                 window.electronAPI.readFile(userData + '/assets/misc/file-icons-match.js', 'utf-8'),
                 window.electronAPI.readFile(userData + '/assets/icons/file-icons.json', 'utf-8')
             ]);
-                window.electronAPI.readFile('/assets/misc/file-icons-match.js', 'utf-8'),
-                window.electronAPI.readFile('/assets/icons/file-icons.json', 'utf-8')
-            ]);
             // file-icons-match.js is a CommonJS module, eval it
             const module = { exports: {} };
             new Function('module', 'exports', matcherRes)(module, module.exports);

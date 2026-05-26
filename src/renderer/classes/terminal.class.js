@@ -1,6 +1,6 @@
 import { Terminal as XtermTerminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
-import { LigaturesAddon } from 'xterm-addon-ligatures';
+// LigaturesAddon removed — requires Node.js APIs (util, fs) unavailable in browser context
 import { WebglAddon } from 'xterm-addon-webgl';
 import Color from 'color';
 
@@ -128,8 +128,6 @@ class Terminal {
         this.term.loadAddon(fitAddon);
         this.term.open(document.getElementById(opts.parentId));
         this.term.loadAddon(new WebglAddon());
-        let ligaturesAddon = new LigaturesAddon();
-        this.term.loadAddon(ligaturesAddon);
         this.term.attachCustomKeyEventHandler(e => {
             window.keyboard.keydownHandler(e);
             return true;
@@ -137,11 +135,16 @@ class Terminal {
         // Prevent soft-keyboard on touch devices #733
         document.querySelectorAll('.xterm-helper-textarea').forEach(textarea => textarea.setAttribute('readonly', 'readonly'));
         this.term.focus();
+        // Forward user input to PTY
+        this.term.onData(data => {
+            window.electronAPI.writeTerminal(this.id, data);
+        });
 
         // IPC event listeners
         this._unsubs = [];
 
-        let unsubData = window.electronAPI.onTerminalData(this.id, (data) => {
+        let unsubData = window.electronAPI.onTerminalData((id, data) => {
+            if (id !== this.id) return;
             this.term.write(data);
 
             let d = Date.now();
@@ -167,7 +170,8 @@ class Terminal {
         });
         if (unsubData) this._unsubs.push(unsubData);
 
-        let unsubExit = window.electronAPI.onTerminalExit(this.id, () => {
+        let unsubExit = window.electronAPI.onTerminalExit((id, exitCode, signal) => {
+            if (id !== this.id) return;
             if (this.onclose) {
                 this.onclose();
             }
@@ -188,6 +192,14 @@ class Terminal {
             }
         });
         if (unsubProcess) this._unsubs.push(unsubProcess);
+
+        // Create the PTY session via IPC
+        window.electronAPI.createTerminal({
+            id: this.id,
+            shell: undefined,
+            params: undefined,
+            cwd: undefined
+        });
 
         this.resendCWD = () => {
             this.oncwdchange(this.cwd || null);

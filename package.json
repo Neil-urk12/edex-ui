@@ -127,5 +127,8 @@
   },
   "optionalDependencies": {
     "cson-parser": "4.0.9"
+  },
+  "devDependencies": {
+    "color": "^5.0.3"
   }
 }

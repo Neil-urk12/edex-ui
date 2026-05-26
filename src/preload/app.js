@@ -28,5 +28,6 @@ export const appAPI = {
     const handler = (_event, id) => callback(id)
     ipcRenderer.on('shortcut-triggered', handler)
     return () => ipcRenderer.removeListener('shortcut-triggered', handler)
-  }
+  },
+  toggleFullscreen: () => ipcRenderer.invoke('toggleFullscreen')
 }

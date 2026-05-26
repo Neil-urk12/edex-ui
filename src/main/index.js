@@ -12,6 +12,8 @@ const __dirname = dirname(__filename)
 
 // --- Error handling ---
 process.on('uncaughtException', (e) => {
+  // Ignore benign pipe errors during shutdown/cleanup
+  if (e.code === 'EPIPE' || e.code === 'ERR_STREAM_DESTROYED') return
   console.error('FATAL:', e)
   try { dialog.showErrorBox('eDEX-UI crashed', e.message || 'Cannot retrieve error message.') } catch (_) {}
   process.exit(1)
@@ -132,7 +134,13 @@ writeFileSync(versionHistoryPath, JSON.stringify(versionHistory, null, 2))
 
 // --- Settings IPC ---
 ipcMain.handle('getSettings', () => {
-  try { return JSON.parse(readFileSync(settingsFile, 'utf-8')) } catch (_) { return defaultSettings }
+  let settings
+  try { settings = JSON.parse(readFileSync(settingsFile, 'utf-8')) } catch (_) { settings = { ...defaultSettings } }
+  settings.settingsDir = userData
+  settings.themesPath = join(userData, 'themes')
+  settings.kbLayoutPath = join(userData, 'keyboards')
+  settings.settingsFile = settingsFile
+  return settings
 })
 
 ipcMain.handle('saveSettings', (_event, partial) => {
@@ -151,6 +159,11 @@ ipcMain.handle('getDisplays', () => screen.getAllDisplays().map(d => ({ id: d.id
 ipcMain.handle('getClipboardText', () => clipboard.readText())
 ipcMain.handle('setClipboardText', (_event, text) => clipboard.writeText(text))
 ipcMain.handle('openPath', (_event, path) => shell.openPath(path))
+ipcMain.handle('toggleFullscreen', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.setFullScreen(!mainWindow.isFullScreen())
+  }
+})
 
 // --- Shell/shortcut IPC ---
 ipcMain.handle('registerShortcut', (_event, accelerator, id) => {
@@ -201,20 +214,12 @@ ipcMain.on('setKbOverride', (_e, arg) => { kbOverride = arg })
 
 // --- Filesystem IPC ---
 ipcMain.handle('readdir', async (_event, dirPath) => {
-  const entries = readdirSync(dirPath)
-  return entries.map(name => {
-    try {
-      const stat = lstatSync(join(dirPath, name))
-      return { name, isDirectory: stat.isDirectory(), size: stat.size, mtime: stat.mtimeMs }
-    } catch (_) {
-      return { name, isDirectory: false, size: 0, mtime: 0 }
-    }
-  })
+  return readdirSync(dirPath)
 })
 
 ipcMain.handle('stat', async (_event, filePath) => {
   const stat = lstatSync(filePath)
-  return { isDirectory: stat.isDirectory(), size: stat.size, mtime: stat.mtimeMs }
+  return { isFile: stat.isFile(), isDirectory: stat.isDirectory(), isSymbolicLink: stat.isSymbolicLink(), size: stat.size, mtime: stat.mtime.getTime() }
 })
 
 ipcMain.handle('readFile', async (_event, filePath, encoding) => {
@@ -231,7 +236,7 @@ ipcMain.handle('watchDirectory', async (_event, dirPath) => {
   try {
     const watcher = watch(dirPath, () => {
       const win = BrowserWindow.getAllWindows()[0]
-      if (win) win.webContents.send('fs-changed', dirPath)
+      if (win) win.webContents.send('fs-changed', 'change')
     })
     fsWatchers[dirPath] = watcher
   } catch (_) {}
@@ -431,45 +436,6 @@ app.whenReady().then(async () => {
     writeFileSync(join(miscDest, 'boot_log.txt'), readFileSync(join(miscSrc, 'boot_log.txt')))
   }
 
-  // Spawn terminal 0 at startup with user's default shell
-  const shellEnv0 = await shellEnv(settings.shell).catch(() => ({ ...process.env }))
-  Object.assign(shellEnv0, {
-    TERM: 'xterm-256color',
-    COLORTERM: 'truecolor',
-    TERM_PROGRAM: 'eDEX-UI',
-    TERM_PROGRAM_VERSION: app.getVersion()
-  })
-
-  const term0 = new TerminalSession({
-    id: 0,
-    shell: settings.shell,
-    params: settings.shellArgs || [],
-    cwd: settings.cwd,
-    env: shellEnv0,
-    ondata: (_id, data) => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('terminal:data', { id: 0, data })
-      }
-    },
-    onexit: (_id, exitCode, signal) => {
-      terminals.delete(0)
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('terminal:exit', { id: 0, exitCode, signal })
-      }
-    },
-    oncwd: (_id, cwd) => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('terminal:cwd-changed', { id: 0, cwd })
-      }
-    },
-    onprocess: (_id, proc) => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('terminal:process-changed', { id: 0, process: proc })
-      }
-    }
-  })
-  terminals.set(0, term0)
-  nextTerminalId = 1  // IPC-created terminals start at 1
 })
 
 app.on('window-all-closed', () => {

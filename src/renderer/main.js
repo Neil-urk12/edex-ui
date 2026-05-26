@@ -8,6 +8,8 @@ import { Sysinfo } from './classes/sysinfo.class.js';
 import { HardwareInspector } from './classes/hardwareInspector.class.js';
 import { Cpuinfo } from './classes/cpuinfo.class.js';
 import { RAMwatcher } from './classes/ramwatcher.class.js';
+import { Terminal } from './classes/terminal.class.js';
+import { FilesystemDisplay } from './classes/filesystem.class.js';
 
 // CSS imports (Vite injects as <style> tags)
 import '../assets/css/augmented.css';
@@ -463,25 +465,31 @@ async function initUI() {
             <pre id="terminal0" class="active"></pre>
         </div>`;
 
-    // TODO: Terminal class needs porting to use electronAPI
-    // For now, stub it out - the terminal class requires its own porting pass
-    // window.term = { 0: new Terminal({ role: "client", parentId: "terminal0", port: window.settings.port || 3000 }) };
-    window.term = {};
+    window.term = {
+        0: new Terminal({
+            id: 0,
+            parentId: "terminal0"
+        })
+    };
     window.currentTerm = 0;
 
+    window.term[0].onprocesschange = p => {
+        document.getElementById("shell_tab0").innerHTML = `<p>MAIN - ${p}</p>`;
+    };
+    // Prevent losing hardware keyboard focus on the terminal when using touch keyboard
     window.onmouseup = e => {
-        if (window.keyboard.linkedToTerm && window.term[window.currentTerm]) {
-            window.term[window.currentTerm].term.focus();
-        }
+        if (window.keyboard && window.keyboard.linkedToTerm) window.term[window.currentTerm].term.focus();
     };
 
-    // Welcome message will be written once Terminal is ported
-    // window.term[0].term.writeln("\033[1m" + `Welcome to eDEX-UI v${appVersion}` + "\033[0m");
+    window.term[0].term.writeln("\x1b[1m" + `Welcome to eDEX-UI v${appVersion}` + "\x1b[0m");
 
     await delay(100);
 
-    // FilesystemDisplay also needs porting - skip for Phase 1
-    // window.fsDisp = new FilesystemDisplay({ parentId: "filesystem" });
+    window.fsDisp = new FilesystemDisplay({ parentId: "filesystem" });
+
+    window.term[0].oncwdchange = cwd => {
+        if (window.fsDisp) window.fsDisp.readFS(cwd);
+    };
 
     await delay(200);
 
