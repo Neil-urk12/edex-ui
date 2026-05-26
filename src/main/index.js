@@ -214,7 +214,17 @@ ipcMain.on('setKbOverride', (_e, arg) => { kbOverride = arg })
 
 // --- Filesystem IPC ---
 ipcMain.handle('readdir', async (_event, dirPath) => {
-  return readdirSync(dirPath)
+  if (!dirPath) return []
+  try {
+    return readdirSync(dirPath)
+  } catch (e) {
+    if (e.code === 'EPERM') {
+      console.warn('[readdir] EPERM Permission denied:', dirPath)
+      return []
+    }
+    if (e.code === 'ENOENT' || e.code === 'EBUSY') return []
+    throw e
+  }
 })
 
 ipcMain.handle('stat', async (_event, filePath) => {
@@ -223,7 +233,11 @@ ipcMain.handle('stat', async (_event, filePath) => {
     const stat = lstatSync(filePath)
     return { isFile: stat.isFile(), isDirectory: stat.isDirectory(), isSymbolicLink: stat.isSymbolicLink(), size: stat.size, mtime: stat.mtime.getTime() }
   } catch (e) {
-    if (e.code === 'ENOENT' || e.code === 'EPERM' || e.code === 'EBUSY') return null
+    if (e.code === 'EPERM') {
+      console.warn('[stat] EPERM Permission denied:', filePath)
+      return null
+    }
+    if (e.code === 'ENOENT' || e.code === 'EBUSY') return null
     throw e
   }
 })
