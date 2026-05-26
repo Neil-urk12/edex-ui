@@ -23,7 +23,6 @@
   },
   "homepage": "https://github.com/GitSquared/edex-ui#readme",
   "dependencies": {
-    "@electron/remote": "^1.2.2",
     "augmented-ui": "^1.1.2",
     "color": "3.2.1",
     "geolite2-redist": "^2.0.4",
@@ -41,7 +40,6 @@
     "tail": "2.2.4",
     "username": "5.1.0",
     "which": "2.0.2",
-    "ws": "7.5.5",
     "xterm": "4.14.1",
     "xterm-addon-attach": "0.6.0",
     "xterm-addon-fit": "0.5.0",

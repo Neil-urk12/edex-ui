@@ -11,9 +11,12 @@
     "tty",
     "terminal"
   ],
-  "main": "src/_boot.js",
+  "main": "out/main/index.js",
   "scripts": {
-    "start": "electron src --nointro",
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "start:legacy": "electron src --nointro",
     "install-linux": "npm install && cd src && npm install && ./../node_modules/.bin/electron-rebuild -f -w node-pty && cd ..",
     "preinstall-windows": "npm install --global --production windows-build-tools && npm install --global node-gyp && setx PYTHON \"%USERPROFILE%\\.windows-build-tools\\python27\\python.exe\"",
     "install-windows": "npm install && cd src && npm install && ..\\node_modules\\.bin\\electron-rebuild -f -w node-pty && cd ..",
@@ -99,14 +102,28 @@
     }
   },
   "dependencies": {
+    "augmented-ui": "^2.0.0",
     "clean-css": "5.2.1",
-    "electron": "^12.1.0",
+    "electron": "^33.0.0",
     "electron-builder": "^22.14.5",
     "electron-rebuild": "^2.3.5",
+    "electron-vite": "^2.3.0",
+    "howler": "2.2.3",
     "mime-types": "^2.1.33",
+    "nanoid": "3.1.30",
     "node-abi": "2.30.1",
     "node-json-minify": "1.0.0",
-    "terser": "^5.9.0"
+    "node-pty": "^1.1.0",
+    "shell-env": "3.0.1",
+    "smoothie": "1.35.0",
+    "systeminformation": "5.9.7",
+    "terser": "^5.9.0",
+    "vite": "^5.4.0",
+    "which": "2.0.2",
+    "xterm": "4.14.1",
+    "xterm-addon-fit": "0.5.0",
+    "xterm-addon-ligatures": "0.5.1",
+    "xterm-addon-webgl": "^0.11.2"
   },
   "optionalDependencies": {
     "cson-parser": "4.0.9"
