@@ -1014,7 +1014,7 @@ describe('Security: saveSettings key allowlist', () => {
     const result = handler({}, { '__proto__': { polluted: true }, 'constructor': 'evil', theme: 'matrix' })
     expect(result.theme).toBe('matrix')
     // verify prototype not polluted — check directly on Object.prototype
-    expect(Object.prototype.hasOwnProperty('polluted')).toBe(false)
+    expect(Object.hasOwn(Object.prototype, 'polluted')).toBe(false)
   })
 
   it('ignores inherited properties on partial prototype chain (Object.hasOwn defense)', async () => {
