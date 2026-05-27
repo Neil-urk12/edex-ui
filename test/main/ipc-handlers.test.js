@@ -1013,9 +1013,56 @@ describe('Security: saveSettings key allowlist', () => {
     const handler = getHandler('saveSettings')
     const result = handler({}, { '__proto__': { polluted: true }, 'constructor': 'evil', theme: 'matrix' })
     expect(result.theme).toBe('matrix')
-    // verify prototype not polluted
-    expect({}.__proto__).toBe(Object.prototype)
-    expect({}.polluted).toBeUndefined()
+    // verify prototype not polluted — check directly on Object.prototype
+    expect(Object.prototype.hasOwnProperty('polluted')).toBe(false)
+  })
+
+  it('ignores inherited properties on partial prototype chain (Object.hasOwn defense)', async () => {
+    mockReadFileSync.mockReturnValue('{}')
+    await loadModule()
+    const handler = getHandler('saveSettings')
+
+    // Inject a property onto Object.prototype that matches an allowlisted key
+    const hadTheme = 'theme' in Object.prototype
+    const originalTheme = Object.prototype.theme
+    Object.prototype.theme = 'inherited-evil'
+
+    try {
+      const result = handler({}, {})
+      // With Object.hasOwn: inherited property should NOT be applied
+      // With `in` operator: inherited property WOULD be applied (this is the bug)
+      expect(result.theme).not.toBe('inherited-evil')
+    } finally {
+      // Clean up
+      if (hadTheme) {
+        Object.prototype.theme = originalTheme
+      } else {
+        delete Object.prototype.theme
+      }
+    }
+  })
+
+  it('handles null and non-object partial without throwing', async () => {
+    mockReadFileSync.mockReturnValue(JSON.stringify({ theme: 'tron' }))
+    await loadModule()
+    const handler = getHandler('saveSettings')
+
+    // null partial — Object.hasOwn(null, key) throws TypeError
+    expect(() => handler({}, null)).not.toThrow()
+    const r1 = handler({}, null)
+    expect(r1.theme).toBe('tron')
+
+    // string partial
+    const r2 = handler({}, 'not-an-object')
+    expect(r2.theme).toBe('tron')
+
+    // undefined partial
+    const r3 = handler({}, undefined)
+    expect(r3.theme).toBe('tron')
+
+    // number partial
+    const r4 = handler({}, 42)
+    expect(r4.theme).toBe('tron')
   })
 })
 

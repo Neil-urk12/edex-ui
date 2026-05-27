@@ -151,8 +151,10 @@ const SETTINGS_ALLOWLIST = [
 ipcMain.handle('saveSettings', (_event, partial) => {
   let settings = { ...defaultSettings }
   try { Object.assign(settings, JSON.parse(readFileSync(settingsFile, 'utf-8'))) } catch (_) {}
-  for (const key of SETTINGS_ALLOWLIST) {
-    if (key in partial) settings[key] = partial[key]
+  if (partial && typeof partial === 'object') {
+    for (const key of SETTINGS_ALLOWLIST) {
+      if (Object.hasOwn(partial, key)) settings[key] = partial[key]
+    }
   }
   writeFileSync(settingsFile, JSON.stringify(settings, null, 4))
   return settings
