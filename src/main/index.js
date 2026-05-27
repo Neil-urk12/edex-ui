@@ -143,13 +143,17 @@ ipcMain.handle('getSettings', () => {
   return settings
 })
 
-const SETTINGS_BLOCKLIST = ['shell', 'shellArgs', 'cwd', 'settingsDir', 'themesPath', 'kbLayoutPath', 'settingsFile']
+const SETTINGS_ALLOWLIST = [
+  'keyboard', 'theme', 'termFontSize', 'audio', 'audioVolume', 'disableFeedbackAudio',
+  'clockHours', 'pingAddr', 'port', 'nointro', 'nocursor', 'forceFullscreen', 'allowWindowed',
+  'excludeThreadsFromToplist', 'hideDotfiles', 'fsListView', 'experimentalGlobeFeatures', 'experimentalFeatures'
+]
 ipcMain.handle('saveSettings', (_event, partial) => {
   let settings = { ...defaultSettings }
   try { Object.assign(settings, JSON.parse(readFileSync(settingsFile, 'utf-8'))) } catch (_) {}
-  const safe = { ...partial }
-  for (const key of SETTINGS_BLOCKLIST) delete safe[key]
-  Object.assign(settings, safe)
+  for (const key of SETTINGS_ALLOWLIST) {
+    if (key in partial) settings[key] = partial[key]
+  }
   writeFileSync(settingsFile, JSON.stringify(settings, null, 4))
   return settings
 })
@@ -295,6 +299,8 @@ function validateWithin(filePath, allowedDir) {
   let resolved
   try { resolved = realpathSync(absPath) } catch { resolved = resolve(absPath) }
   const rel = relative(allowed, resolved)
+  // rel === '' guards against empty filenames resolving to the allowed directory itself
+  // so resolved path cannot equal the allowed directory
   if (rel.startsWith('..') || isAbsolute(rel) || rel === '') {
     throw new Error('Access denied: path outside allowed directory')
   }

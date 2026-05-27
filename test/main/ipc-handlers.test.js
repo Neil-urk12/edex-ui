@@ -897,7 +897,7 @@ describe('Security: edex-audio protocol TOCTOU fix', () => {
   })
 })
 
-describe('Security: saveSettings key whitelist', () => {
+describe('Security: saveSettings key allowlist', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.resetModules()
@@ -944,17 +944,24 @@ describe('Security: saveSettings key whitelist', () => {
     await loadModule()
     const handler = getHandler('saveSettings')
     const safeUpdate = {
-      theme: 'matrix',
       keyboard: 'fr-FR',
+      theme: 'matrix',
       termFontSize: 18,
       audio: false,
       audioVolume: 0.5,
+      disableFeedbackAudio: true,
       clockHours: 12,
       pingAddr: '8.8.8.8',
       port: 8080,
       nointro: true,
+      nocursor: false,
+      forceFullscreen: true,
+      allowWindowed: false,
+      excludeThreadsFromToplist: true,
       hideDotfiles: true,
       fsListView: true,
+      experimentalGlobeFeatures: true,
+      experimentalFeatures: true,
     }
     const result = handler({}, safeUpdate)
     for (const [key, val] of Object.entries(safeUpdate)) {
@@ -978,6 +985,37 @@ describe('Security: saveSettings key whitelist', () => {
     expect(result.kbLayoutPath).toBeUndefined()
     expect(result.settingsFile).toBeUndefined()
     expect(result.theme).toBe('matrix')
+  })
+
+  it('drops unknown keys not in allowlist (default-deny)', async () => {
+    mockReadFileSync.mockReturnValue('{}')
+    await loadModule()
+    const handler = getHandler('saveSettings')
+    const result = handler({}, { maliciousKey: 'evil', theme: 'matrix' })
+    expect(result.maliciousKey).toBeUndefined()
+    expect(result.theme).toBe('matrix')
+  })
+
+  it('drops all keys when partial has only blocked/unknown keys', async () => {
+    mockReadFileSync.mockReturnValue(JSON.stringify({ theme: 'tron' }))
+    await loadModule()
+    const handler = getHandler('saveSettings')
+    const result = handler({}, { shell: '/bin/sh', cwd: '/etc', unknownKey: 'val' })
+    expect(result.shell).toBe('bash')  // defaultSettings value, not overwritten
+    expect(result.cwd).toBe('/tmp/test-userdata')  // defaultSettings value, not overwritten
+    expect(result.unknownKey).toBeUndefined()
+    expect(result.theme).toBe('tron')
+  })
+
+  it('drops __proto__ and constructor to prevent prototype pollution', async () => {
+    mockReadFileSync.mockReturnValue('{}')
+    await loadModule()
+    const handler = getHandler('saveSettings')
+    const result = handler({}, { '__proto__': { polluted: true }, 'constructor': 'evil', theme: 'matrix' })
+    expect(result.theme).toBe('matrix')
+    // verify prototype not polluted
+    expect({}.__proto__).toBe(Object.prototype)
+    expect({}.polluted).toBeUndefined()
   })
 })
 
@@ -1065,6 +1103,16 @@ describe('validateWithin helper consolidation', () => {
       await loadModule()
       const handler = getHandler(channel)
       expect(() => handler({}, ...args)).not.toThrow()
+    })
+  }
+  for (const { channel } of handlers) {
+    it(`${channel} rejects empty filename (rel === '' defense)`, async () => {
+      // getTheme appends '.json' so empty name yields themesDir/.json (inside dir)
+      // getKeyboardLayout/Path use join(dir, name) — empty yields dir itself (rel === '')
+      if (channel === 'getTheme' || channel === 'getThemePath') return
+      await loadModule()
+      const handler = getHandler(channel)
+      expect(() => handler({}, '')).toThrow(/denied|outside|Invalid/)
     })
   }
 })
