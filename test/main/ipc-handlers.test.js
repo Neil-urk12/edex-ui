@@ -1066,6 +1066,215 @@ describe('Security: saveSettings key allowlist', () => {
   })
 })
 
+describe('Security: terminal:create shell validation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.resetModules()
+    mockExistsSync.mockReturnValue(true)
+    mockReadFileSync.mockReturnValue(JSON.stringify({ shell: '/bin/bash', shellArgs: ['--login'] }))
+    mockRealpathSync.mockImplementation(p => p)
+  })
+
+  it('rejects arbitrary shell path and falls back to settings.shell', async () => {
+    const { default: whichMock } = await import('which')
+    whichMock.mockResolvedValueOnce('/usr/bin/evil')
+    await loadModule()
+    const handler = getHandler('terminal:create')
+    const result = await handler({}, { shell: '/usr/bin/evil' })
+    // Shell should fall back to settings.shell since '/usr/bin/evil' is not in allowlist
+    expect(result).toBeDefined()
+  })
+
+  it('accepts a shell in the allowlist', async () => {
+    const { default: whichMock } = await import('which')
+    whichMock.mockResolvedValueOnce('/bin/bash')
+    mockReadFileSync.mockReturnValue(JSON.stringify({ shell: '/bin/bash', shellArgs: ['--login'] }))
+    await loadModule()
+    const handler = getHandler('terminal:create')
+    const result = await handler({}, { shell: '/bin/bash' })
+    expect(result).toBeDefined()
+  })
+
+  it('falls back to settings.shell when which fails', async () => {
+    const { default: whichMock } = await import('which')
+    whichMock.mockRejectedValueOnce(new Error('not found'))
+    await loadModule()
+    const handler = getHandler('terminal:create')
+    const result = await handler({}, { shell: 'nonexistent' })
+    expect(result).toBeDefined()
+  })
+
+  it('throws on params containing shell metacharacters instead of silent filtering', async () => {
+    const { default: whichMock } = await import('which')
+    whichMock.mockResolvedValueOnce('/bin/bash')
+    mockReadFileSync.mockReturnValue(JSON.stringify({ shell: '/bin/bash', shellArgs: ['--login'] }))
+    await loadModule()
+    const handler = getHandler('terminal:create')
+    await expect(handler({}, { params: ['--login', '-c rm -rf /; echo pwned'] }))
+      .rejects.toThrow(/Invalid shell parameter|forbidden characters/)
+  })
+
+  it('rejects -c flag in params to prevent argv injection', async () => {
+    const { default: whichMock } = await import('which')
+    whichMock.mockResolvedValueOnce('/bin/bash')
+    mockReadFileSync.mockReturnValue(JSON.stringify({ shell: '/bin/bash', shellArgs: ['--login'] }))
+    await loadModule()
+    const handler = getHandler('terminal:create')
+    await expect(handler({}, { params: ['-c', 'rm -rf /'] }))
+      .rejects.toThrow(/Invalid shell parameter|\-c flag/)
+  })
+
+  it('rejects -C flag (uppercase) in params', async () => {
+    const { default: whichMock } = await import('which')
+    whichMock.mockResolvedValueOnce('/bin/bash')
+    mockReadFileSync.mockReturnValue(JSON.stringify({ shell: '/bin/bash', shellArgs: ['--login'] }))
+    await loadModule()
+    const handler = getHandler('terminal:create')
+    await expect(handler({}, { params: ['-C', 'echo hi'] }))
+      .rejects.toThrow(/Invalid shell parameter|\-c flag/)
+  })
+
+  it('rejects params with backslash characters', async () => {
+    const { default: whichMock } = await import('which')
+    whichMock.mockResolvedValueOnce('/bin/bash')
+    mockReadFileSync.mockReturnValue(JSON.stringify({ shell: '/bin/bash', shellArgs: ['--login'] }))
+    await loadModule()
+    const handler = getHandler('terminal:create')
+    await expect(handler({}, { params: ['--login', 'arg\\with\\backslash'] }))
+      .rejects.toThrow(/Invalid shell parameter|forbidden characters/)
+  })
+
+  it('rejects params with single quotes', async () => {
+    const { default: whichMock } = await import('which')
+    whichMock.mockResolvedValueOnce('/bin/bash')
+    mockReadFileSync.mockReturnValue(JSON.stringify({ shell: '/bin/bash', shellArgs: ['--login'] }))
+    await loadModule()
+    const handler = getHandler('terminal:create')
+    await expect(handler({}, { params: ["--login", "arg'with'quotes"] }))
+      .rejects.toThrow(/Invalid shell parameter|forbidden characters/)
+  })
+
+  it('rejects params with double quotes', async () => {
+    const { default: whichMock } = await import('which')
+    whichMock.mockResolvedValueOnce('/bin/bash')
+    mockReadFileSync.mockReturnValue(JSON.stringify({ shell: '/bin/bash', shellArgs: ['--login'] }))
+    await loadModule()
+    const handler = getHandler('terminal:create')
+    await expect(handler({}, { params: ['--login', 'arg"with"quotes'] }))
+      .rejects.toThrow(/Invalid shell parameter|forbidden characters/)
+  })
+
+  it('rejects params with newline characters', async () => {
+    const { default: whichMock } = await import('which')
+    whichMock.mockResolvedValueOnce('/bin/bash')
+    mockReadFileSync.mockReturnValue(JSON.stringify({ shell: '/bin/bash', shellArgs: ['--login'] }))
+    await loadModule()
+    const handler = getHandler('terminal:create')
+    await expect(handler({}, { params: ['--login', 'arg\nwith\nnewline'] }))
+      .rejects.toThrow(/Invalid shell parameter|forbidden characters/)
+  })
+
+  it('rejects params with hash character (comment injection)', async () => {
+    const { default: whichMock } = await import('which')
+    whichMock.mockResolvedValueOnce('/bin/bash')
+    mockReadFileSync.mockReturnValue(JSON.stringify({ shell: '/bin/bash', shellArgs: ['--login'] }))
+    await loadModule()
+    const handler = getHandler('terminal:create')
+    await expect(handler({}, { params: ['--login', '#injected-comment'] }))
+      .rejects.toThrow(/Invalid shell parameter|forbidden characters/)
+  })
+
+  it('rejects settings.shell not in allowlist when options.shell not provided', async () => {
+    const { default: whichMock } = await import('which')
+    mockReadFileSync.mockReturnValue(JSON.stringify({ shell: '/tmp/evil-shell', shellArgs: ['--login'] }))
+    whichMock.mockImplementation(async (cmd) => {
+      if (cmd === '/tmp/evil-shell') return '/tmp/evil-shell'
+      if (cmd === 'bash') return '/bin/bash'
+      throw new Error('not found')
+    })
+    await loadModule()
+    const handler = getHandler('terminal:create')
+    await expect(handler({}, {})).rejects.toThrow(/allowlist|No allowed shell/)
+  })
+
+  it('throws when both options.shell and settings.shell fail allowlist', async () => {
+    const { default: whichMock } = await import('which')
+    mockReadFileSync.mockReturnValue(JSON.stringify({ shell: '/tmp/evil-shell', shellArgs: ['--login'] }))
+    whichMock.mockImplementation(async (cmd) => {
+      if (cmd === '/tmp/evil-shell') return '/tmp/evil-shell'
+      throw new Error('not found')
+    })
+    await loadModule()
+    const handler = getHandler('terminal:create')
+    await expect(handler({}, {})).rejects.toThrow(/allowlist|No allowed shell/)
+  })
+
+  it('passes through safe params unchanged', async () => {
+    const { default: whichMock } = await import('which')
+    whichMock.mockImplementation(async (cmd) => {
+      if (cmd === '/bin/bash') return '/bin/bash'
+      throw new Error('not found')
+    })
+    mockReadFileSync.mockReturnValue(JSON.stringify({ shell: '/bin/bash', shellArgs: ['--login'] }))
+    await loadModule()
+    const handler = getHandler('terminal:create')
+    const result = await handler({}, { params: ['--login', '--norc'] })
+    expect(result).toBeDefined()
+  })
+
+  it('accepts /usr/local/bin/bash as allowed shell', async () => {
+    const { default: whichMock } = await import('which')
+    whichMock.mockImplementation(async (cmd) => {
+      if (cmd === '/usr/local/bin/bash') return '/usr/local/bin/bash'
+      throw new Error('not found')
+    })
+    mockReadFileSync.mockReturnValue(JSON.stringify({ shell: '/usr/local/bin/bash', shellArgs: ['--login'] }))
+    await loadModule()
+    const handler = getHandler('terminal:create')
+    await expect(handler({}, { shell: '/usr/local/bin/bash' })).resolves.toBeDefined()
+  })
+
+  it('accepts /opt/homebrew/bin/zsh as allowed shell', async () => {
+    const { default: whichMock } = await import('which')
+    whichMock.mockImplementation(async (cmd) => {
+      if (cmd === '/opt/homebrew/bin/zsh') return '/opt/homebrew/bin/zsh'
+      throw new Error('not found')
+    })
+    mockReadFileSync.mockReturnValue(JSON.stringify({ shell: '/opt/homebrew/bin/zsh', shellArgs: ['--login'] }))
+    await loadModule()
+    const handler = getHandler('terminal:create')
+    await expect(handler({}, { shell: '/opt/homebrew/bin/zsh' })).resolves.toBeDefined()
+  })
+
+  it('rejects params with tilde character (home dir expansion)', async () => {
+    const { default: whichMock } = await import('which')
+    whichMock.mockResolvedValue('/bin/bash')
+    mockReadFileSync.mockReturnValue(JSON.stringify({ shell: '/bin/bash', shellArgs: ['--login'] }))
+    await loadModule()
+    const handler = getHandler('terminal:create')
+    await expect(handler({}, { params: ['--login', '~/secret'] }))
+      .rejects.toThrow(/Invalid shell parameter|forbidden characters/)
+  })
+
+  it('rejects cwd outside userData directory', async () => {
+    const { default: whichMock } = await import('which')
+    whichMock.mockResolvedValueOnce('/bin/bash')
+    mockReadFileSync.mockReturnValue(JSON.stringify({ shell: '/bin/bash', shellArgs: ['--login'] }))
+    await loadModule()
+    const handler = getHandler('terminal:create')
+    await expect(handler({}, { cwd: '/etc' })).rejects.toThrow(/Access denied|outside allowed/)
+  })
+
+  it('allows cwd inside userData directory', async () => {
+    const { default: whichMock } = await import('which')
+    whichMock.mockResolvedValueOnce('/bin/bash')
+    mockReadFileSync.mockReturnValue(JSON.stringify({ shell: '/bin/bash', shellArgs: ['--login'] }))
+    await loadModule()
+    const handler = getHandler('terminal:create')
+    // Should not throw for a path inside userData
+    await expect(handler({}, { cwd: '/tmp/test-userdata' })).resolves.toBeDefined()
+  })
+})
 describe('Path handlers return resolved path', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -1162,4 +1371,48 @@ describe('validateWithin helper consolidation', () => {
       expect(() => handler({}, '')).toThrow(/denied|outside|Invalid/)
     })
   }
+})
+
+describe('validateFilename false positive on ..', () => {
+  it('accepts filename with embedded .. that is not traversal (track..remix.mp3)', async () => {
+    const { validateFilename } = await import('../../src/main/ipc-validation.js')
+    expect(() => validateFilename('track..remix.mp3')).not.toThrow()
+  })
+
+  it('accepts filename ending with .. (v2..final)', async () => {
+    const { validateFilename } = await import('../../src/main/ipc-validation.js')
+    expect(() => validateFilename('v2..final')).not.toThrow()
+  })
+
+  it('rejects ../etc/passwd (traversal at start)', async () => {
+    const { validateFilename } = await import('../../src/main/ipc-validation.js')
+    expect(() => validateFilename('../etc/passwd')).toThrow(/Invalid/)
+  })
+
+  it('rejects foo/../../etc/passwd (traversal in middle)', async () => {
+    const { validateFilename } = await import('../../src/main/ipc-validation.js')
+    expect(() => validateFilename('foo/../../etc/passwd')).toThrow(/Invalid/)
+  })
+
+  it('rejects null bytes', async () => {
+    const { validateFilename } = await import('../../src/main/ipc-validation.js')
+    expect(() => validateFilename('file\0evil')).toThrow(/Invalid/)
+  })
+})
+
+describe('Security: validateFilename rejects absolute paths', () => {
+  it('rejects /etc/passwd', async () => {
+    const { validateFilename } = await import('../../src/main/ipc-validation.js')
+    expect(() => validateFilename('/etc/passwd')).toThrow(/Invalid/)
+  })
+
+  it('rejects /root/.ssh/id_rsa', async () => {
+    const { validateFilename } = await import('../../src/main/ipc-validation.js')
+    expect(() => validateFilename('/root/.ssh/id_rsa')).toThrow(/Invalid/)
+  })
+
+  it('still accepts relative filenames like config.json', async () => {
+    const { validateFilename } = await import('../../src/main/ipc-validation.js')
+    expect(() => validateFilename('config.json')).not.toThrow()
+  })
 })

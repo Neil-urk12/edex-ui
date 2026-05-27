@@ -666,7 +666,7 @@ class FilesystemDisplay {
                         new Modal({
                             type: "info",
                             title: "Failed to load file: " + block.path,
-                            html: String(err)
+                            html: _escapeHtml(String(err))
                         });
                         console.log(err);
                         return;
@@ -676,7 +676,7 @@ class FilesystemDisplay {
                         {
                             type: "custom",
                             title: _escapeHtml(name),
-                            html: `<textarea id="fileEdit" rows="40" cols="150" spellcheck="false">${data}</textarea><p id="fedit-status"></p>`,
+                            html: `<textarea id="fileEdit" rows="40" cols="150" spellcheck="false">${_escapeHtml(data)}</textarea><p id="fedit-status"></p>`,
                             buttons: [
                                 {label:"Save to Disk",action:`window.writeFile('${block.path}')`}
                             ]
@@ -802,14 +802,11 @@ class FilesystemDisplay {
     async loadIcons() {
         try {
             const userData = await window.electronAPI.getAppPath('userData');
-            const [matcherRes, iconsRes] = await Promise.all([
-                window.electronAPI.readFile(userData + '/assets/misc/file-icons-match.js', 'utf-8'),
+            const [matcher, iconsRes] = await Promise.all([
+                window.electronAPI.loadFileIcons(),
                 window.electronAPI.readFile(userData + '/assets/icons/file-icons.json', 'utf-8')
             ]);
-            // file-icons-match.js is a CommonJS module, eval it
-            const module = { exports: {} };
-            new Function('module', 'exports', matcherRes)(module, module.exports);
-            this.fileIconsMatcher = module.exports;
+            this.fileIconsMatcher = matcher;
             this.icons = JSON.parse(iconsRes);
         } catch (e) {
             console.warn("Failed to load file icons:", e);

@@ -3,6 +3,9 @@
 
 window.modals = {};
 
+let _focusedId = null;
+
+export const _esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
 export class Modal {
     constructor(options, onclose) {
         if (!options || !options.type) throw new Error("Missing parameters");
@@ -16,6 +19,8 @@ export class Modal {
         this.message = options.message || "Lorem ipsum dolor sit amet.";
         this.onclose = onclose;
         this.classes = "modal_popup";
+        this._closed = false;
+        this._destroyed = false;
         let buttons = [];
         let augs = [];
         let zindex = 0;
@@ -50,24 +55,37 @@ export class Modal {
                 break;
         }
 
-        let DOMstring = `<div id="modal_${this.id}" class="${this.classes}" style="z-index:${zindex+Object.keys(window.modals).length};" augmented-ui="${augs.join(" ")} exe">
-            <h1>${this.title}</h1>
-            ${this.type === "custom" ? options.html : "<h5>"+this.message+"</h5>"}
+        const titleId = `modal_title_${this.id}`;
+        // options.html is rendered without escaping — caller must sanitize
+        let DOMstring = `<div id="modal_${this.id}" class="${this.classes}" style="z-index:${zindex+Object.keys(window.modals).length};" augmented-ui="${augs.join(" ")} exe" role="dialog" aria-modal="true" aria-labelledby="${titleId}">
+            <h1 id="${titleId}">${_esc(this.title)}</h1>
+            ${this.type === "custom" ? options.html : "<h5>"+_esc(this.message)+"</h5>"}
             <div>`;
-            buttons.forEach(b => {
-                DOMstring += `<button onclick="${b.action}">${b.label}</button>`;
+            const buttonActions = [];
+            buttons.forEach((b, i) => {
+                buttonActions.push(b.action);
+                DOMstring += `<button data-action-idx="${i}">${_esc(b.label)}</button>`;
             });
         DOMstring += `</div>
         </div>`;
 
         this.close = () => {
+            if (this._closed || this._destroyed) return;
+            this._closed = true;
             let modalElement = document.getElementById("modal_"+this.id);
             if (!modalElement) return;
             modalElement.setAttribute("class", "modal_popup "+this.type+" blink");
             if (window.audioManager) window.audioManager.denied.play();
+            // Clean up drag listeners if close triggered mid-drag
+            window.removeEventListener("mousemove", this._modalMousemoveHandler);
+            window.removeEventListener("mouseup", this._modalMouseupHandler);
+            window.removeEventListener("touchmove", this._modalTouchmoveHandler);
+            window.removeEventListener("touchend", this._modalTouchendHandler);
             setTimeout(() => {
+                if (this._destroyed) return;
                 modalElement.remove();
-                delete window.modals[this.id];
+                if (window.modals) delete window.modals[this.id];
+                document.removeEventListener("keydown", this._escapeKeyHandler);
             }, 100);
 
             if (typeof this.onclose === "function") {
@@ -79,6 +97,7 @@ export class Modal {
             let modalElement = document.getElementById("modal_"+this.id);
             if (!modalElement) return;
             modalElement.setAttribute("class", this.classes+" focus");
+            _focusedId = this.id;
             Object.keys(window.modals).forEach(id => {
                 if (id === this.id) return;
                 if (window.modals[id] && window.modals[id].unfocus) window.modals[id].unfocus();
@@ -89,14 +108,56 @@ export class Modal {
             let modalElement = document.getElementById("modal_"+this.id);
             if (!modalElement) return;
             modalElement.setAttribute("class", this.classes);
+            if (_focusedId === this.id) _focusedId = null;
         };
 
         let tmp = document.createElement("div");
         tmp.innerHTML = DOMstring;
         let element = tmp.firstChild;
 
-        element.addEventListener("mousedown", () => { this.focus(); });
-        element.addEventListener("touchstart", () => { this.focus(); });
+        this._mousedownHandler = () => { this.focus(); };
+        this._touchstartHandler = () => { this.focus(); };
+        element.addEventListener("mousedown", this._mousedownHandler);
+        element.addEventListener("touchstart", this._touchstartHandler);
+
+        // Bind button actions via addEventListener (safe against XSS in onclick attributes)
+        element.querySelectorAll('button[data-action-idx]').forEach(btn => {
+            const idx = parseInt(btn.dataset.actionIdx);
+            if (buttonActions[idx]) {
+                btn.addEventListener('click', () => { new Function(buttonActions[idx])(); });
+            }
+        });
+
+        // Escape key handler
+        this._escapeKeyHandler = (e) => {
+            if (e.key === 'Escape' && _focusedId && window.modals[_focusedId]) {
+                window.modals[_focusedId].close();
+            }
+        };
+        document.addEventListener('keydown', this._escapeKeyHandler);
+
+        // Focus trapping
+        this._trapFocusHandler = (e) => {
+            if (e.key !== 'Tab') return;
+            const el = document.getElementById("modal_"+this.id);
+            if (!el) return;
+            const focusable = el.querySelectorAll('button, input, select, textarea, [tabindex]:not([tabindex="-1"]), a[href]');
+            if (focusable.length === 0) return;
+            const first = focusable[0];
+            const last = focusable[focusable.length - 1];
+            if (e.shiftKey) {
+                if (document.activeElement === first) {
+                    e.preventDefault();
+                    last.focus();
+                }
+            } else {
+                if (document.activeElement === last) {
+                    e.preventDefault();
+                    first.focus();
+                }
+            }
+        };
+        element.addEventListener('keydown', this._trapFocusHandler);
 
         if (window.audioManager) {
             switch(this.type) {
@@ -122,48 +183,114 @@ export class Modal {
             draggedModal.posY = rect.top;
         }, 500);
 
-        function modalMousedownHandler(e) {
-            draggedModal.lastMouseX = e.clientX;
-            draggedModal.lastMouseY = e.clientY;
-            draggedModal.setAttribute("style", `${draggedModal.zindex}background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.5);left: ${draggedModal.posX}px;top: ${draggedModal.posY}px;`);
-            window.addEventListener("mousemove", modalMousemoveHandler);
-            window.addEventListener("mouseup", modalMouseupHandler);
-        }
-        function modalMousemoveHandler(e) {
+        let modalMousemoveHandler = function(e) {
             draggedModal.posX = draggedModal.posX + (e.clientX - draggedModal.lastMouseX);
             draggedModal.posY = draggedModal.posY + (e.clientY - draggedModal.lastMouseY);
             draggedModal.lastMouseX = e.clientX;
             draggedModal.lastMouseY = e.clientY;
             draggedModal.setAttribute("style", `${draggedModal.zindex}background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.5);left: ${draggedModal.posX}px;top: ${draggedModal.posY}px;`);
-        }
-        function modalMouseupHandler() {
+        };
+        let modalMouseupHandler = function() {
             window.removeEventListener("mousemove", modalMousemoveHandler);
             draggedModal.setAttribute("style", `${draggedModal.zindex}left: ${draggedModal.posX}px;top: ${draggedModal.posY}px;`);
             window.removeEventListener("mouseup", modalMouseupHandler);
-        }
-        dragTarget.addEventListener("mousedown", modalMousedownHandler);
+        };
+        this._modalMousemoveHandler = modalMousemoveHandler;
+        this._modalMouseupHandler = modalMouseupHandler;
 
-        function modalTouchstartHandler(e) {
-            draggedModal.lastMouseX = e.changedTouches[0].clientX;
-            draggedModal.lastMouseY = e.changedTouches[0].clientY;
+        this._dragMousedownHandler = function(e) {
+            draggedModal.lastMouseX = e.clientX;
+            draggedModal.lastMouseY = e.clientY;
             draggedModal.setAttribute("style", `${draggedModal.zindex}background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.5);left: ${draggedModal.posX}px;top: ${draggedModal.posY}px;`);
-            window.addEventListener("touchmove", modalTouchmoveHandler);
-            window.addEventListener("touchend", modalTouchendHandler);
-        }
-        function modalTouchmoveHandler(e) {
+            window.addEventListener("mousemove", modalMousemoveHandler);
+            window.addEventListener("mouseup", modalMouseupHandler);
+        };
+        dragTarget.addEventListener("mousedown", this._dragMousedownHandler);
+
+        let modalTouchmoveHandler = function(e) {
             draggedModal.posX = draggedModal.posX + (e.changedTouches[0].clientX - draggedModal.lastMouseX);
             draggedModal.posY = draggedModal.posY + (e.changedTouches[0].clientY - draggedModal.lastMouseY);
             draggedModal.lastMouseX = e.changedTouches[0].clientX;
             draggedModal.lastMouseY = e.changedTouches[0].clientY;
             draggedModal.setAttribute("style", `${draggedModal.zindex}background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.5);left: ${draggedModal.posX}px;top: ${draggedModal.posY}px;`);
-        }
-        function modalTouchendHandler() {
+        };
+        let modalTouchendHandler = function() {
             window.removeEventListener("touchmove", modalTouchmoveHandler);
             draggedModal.setAttribute("style", `${draggedModal.zindex}left: ${draggedModal.posX}px;top: ${draggedModal.posY}px;`);
             window.removeEventListener("touchend", modalTouchendHandler);
-        }
-        dragTarget.addEventListener("touchstart", modalTouchstartHandler);
+        };
+        this._modalTouchmoveHandler = modalTouchmoveHandler;
+        this._modalTouchendHandler = modalTouchendHandler;
+
+        this._dragTouchstartHandler = function(e) {
+            draggedModal.lastMouseX = e.changedTouches[0].clientX;
+            draggedModal.lastMouseY = e.changedTouches[0].clientY;
+            draggedModal.setAttribute("style", `${draggedModal.zindex}background: rgba(var(--color_r), var(--color_g), var(--color_b), 0.5);left: ${draggedModal.posX}px;top: ${draggedModal.posY}px;`);
+            window.addEventListener("touchmove", modalTouchmoveHandler);
+            window.addEventListener("touchend", modalTouchendHandler);
+        };
+        dragTarget.addEventListener("touchstart", this._dragTouchstartHandler);
 
         return this.id;
+    }
+
+    get isVisible() {
+        return document.getElementById("modal_"+this.id) !== null;
+    }
+
+    get isFocused() {
+        return _focusedId === this.id;
+    }
+
+    setTitle(newTitle) {
+        this.title = newTitle;
+        const el = document.getElementById("modal_"+this.id);
+        if (!el) return;
+        const h1 = el.querySelector('h1');
+        if (h1) h1.textContent = newTitle;
+    }
+
+    setMessage(newMessage) {
+        this.message = newMessage;
+        const el = document.getElementById("modal_"+this.id);
+        if (!el) return;
+        const h5 = el.querySelector('h5');
+        if (h5) h5.textContent = newMessage;
+    }
+
+    destroy() {
+        if (this._destroyed) return;
+        this._destroyed = true;
+
+        const el = document.getElementById("modal_"+this.id);
+        if (el) {
+            el.removeEventListener("mousedown", this._mousedownHandler);
+            el.removeEventListener("touchstart", this._touchstartHandler);
+            el.removeEventListener("keydown", this._trapFocusHandler);
+
+            // Clean up drag target listeners before removing element
+            const dragTarget = el.querySelector('h1');
+            if (dragTarget) {
+                dragTarget.removeEventListener("mousedown", this._dragMousedownHandler);
+                dragTarget.removeEventListener("touchstart", this._dragTouchstartHandler);
+            }
+
+            el.remove();
+        }
+
+        // Clean up drag listeners
+        window.removeEventListener("mousemove", this._modalMousemoveHandler);
+        window.removeEventListener("mouseup", this._modalMouseupHandler);
+        window.removeEventListener("touchmove", this._modalTouchmoveHandler);
+        window.removeEventListener("touchend", this._modalTouchendHandler);
+
+
+        // Remove escape handler
+        document.removeEventListener("keydown", this._escapeKeyHandler);
+
+        // Remove from registry
+        delete window.modals[this.id];
+
+        if (_focusedId === this.id) _focusedId = null;
     }
 }

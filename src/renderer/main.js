@@ -242,7 +242,6 @@ function displayLine() {
         window.audioManager.granted.play();
     } else {
         try { if (window.audioManager) window.audioManager.stdout.play(); } catch (e) { console.error('[BOOT] Audio play error:', e); }
-        window.audioManager.stdout.play();
     }
     bootScreen.innerHTML += bootLogLines[i] + "<br/>";
     i++;
@@ -250,6 +249,7 @@ function displayLine() {
     switch (true) {
         case i === 2:
             bootScreen.innerHTML += `eDEX-UI Kernel version ${appVersion} boot at ${Date().toString()}; root:xnu-1699.22.73~1/RELEASE_X86_64`;
+            break;
         case i === 4:
             setTimeout(displayLine, 500);
             break;
@@ -586,27 +586,27 @@ window.openSettings = async () => {
                     <tr>
                         <td>shell</td>
                         <td>The program to run as a terminal emulator</td>
-                        <td><input type="text" id="settingsEditor-shell" value="${window.settings.shell}"></td>
+                        <td><input type="text" id="settingsEditor-shell" value="${escapeHtml(window.settings.shell)}"></td>
                     </tr>
                     <tr>
                         <td>shellArgs</td>
                         <td>Arguments to pass to the shell</td>
-                        <td><input type="text" id="settingsEditor-shellArgs" value="${window.settings.shellArgs || ''}"></td>
+                        <td><input type="text" id="settingsEditor-shellArgs" value="${escapeHtml(String(window.settings.shellArgs || ''))}"></td>
                     </tr>
                     <tr>
                         <td>cwd</td>
                         <td>Working Directory to start in</td>
-                        <td><input type="text" id="settingsEditor-cwd" value="${window.settings.cwd}"></td>
+                        <td><input type="text" id="settingsEditor-cwd" value="${escapeHtml(window.settings.cwd)}"></td>
                     </tr>
                     <tr>
                         <td>env</td>
                         <td>Custom shell environment override</td>
-                        <td><input type="text" id="settingsEditor-env" value="${window.settings.env}"></td>
+                        <td><input type="text" id="settingsEditor-env" value="${escapeHtml(String(window.settings.env || ''))}"></td>
                     </tr>
                     <tr>
                         <td>username</td>
                         <td>Custom username to display at boot</td>
-                        <td><input type="text" id="settingsEditor-username" value="${window.settings.username}"></td>
+                        <td><input type="text" id="settingsEditor-username" value="${escapeHtml(window.settings.username)}"></td>
                     </tr>
                     <tr>
                         <td>keyboard</td>

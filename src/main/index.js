@@ -1,11 +1,13 @@
 import { app, BrowserWindow, ipcMain, shell, screen, clipboard, globalShortcut, dialog, protocol, net } from 'electron'
-import { join, dirname, resolve, relative, sep, isAbsolute, extname } from 'path'
+import { join, dirname, resolve, relative, sep, isAbsolute, extname, basename } from 'path'
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, lstatSync, watch, realpathSync } from 'fs'
+import { createHash } from 'crypto'
 import { fileURLToPath, pathToFileURL } from 'url'
 import which from 'which'
 import shellEnv from 'shell-env'
 import si from 'systeminformation'
 import { TerminalSession } from './terminal.js'
+import { validateFilename, validateAndResolve, validateWithin, validatePath, validateAssetPath } from './ipc-validation.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -120,6 +122,15 @@ const assetsBase = join(__dirname, '..', '..', 'src', 'assets')
 if (existsSync(assetsBase)) {
   mirrorAssets(assetsBase, join(userData, 'assets'))
 }
+// Compute and store SHA-256 hashes of security-sensitive asset files for integrity verification
+const assetHashes = {}
+const hashedAssets = ['misc/file-icons-match.js']
+for (const relPath of hashedAssets) {
+  const fullPath = join(userData, 'assets', relPath)
+  if (existsSync(fullPath)) {
+    assetHashes[relPath] = createHash('sha256').update(readFileSync(fullPath)).digest('hex')
+  }
+}
 // --- Version history ---
 const versionHistoryPath = join(userData, 'versions_log.json')
 let versionHistory = {}
@@ -188,7 +199,7 @@ ipcMain.handle('getDisplays', () => screen.getAllDisplays().map(d => ({ id: d.id
 ipcMain.handle('getClipboardText', () => clipboard.readText())
 ipcMain.handle('setClipboardText', (_event, text) => clipboard.writeText(text))
 ipcMain.handle('openPath', (_event, path) => {
-  const resolved = validatePath(path)
+  const resolved = validatePath(path, userData)
   const ext = extname(resolved).toLowerCase()
   if (ext && !SAFE_OPEN_EXTENSIONS.includes(ext)) {
     throw new Error('File type not allowed')
@@ -218,69 +229,48 @@ ipcMain.handle('unregisterShortcut', (_event, accelerator) => {
 
 // --- Asset content IPC ---
 ipcMain.handle('readAsset', (_event, relativePath) => {
-  if (typeof relativePath !== 'string' || relativePath.includes('\0')) throw new Error('Invalid path')
-  if (!relativePath || relativePath.trim() === '') throw new Error('Invalid path: empty')
-  const absPath = join(userData, 'assets', relativePath)
-  const assetsDir = resolve(join(userData, 'assets'))
-  let absResolved
-  try { absResolved = realpathSync(absPath) } catch { absResolved = resolve(absPath) }
-  const rel = relative(assetsDir, absResolved)
-  if (rel.startsWith('..') || isAbsolute(rel) || rel === '') {
-    throw new Error('Path traversal detected')
-  }
+  const absResolved = validateAssetPath(relativePath, userData)
   return readFileSync(absResolved, 'utf-8')
 })
+ipcMain.handle('loadFileIcons', async (_event) => {
+  const resolved = validateAssetPath('misc/file-icons-match.js', userData)
+  // Verify file integrity before executing to prevent RCE via tampered assets
+  const content = readFileSync(resolved, 'utf-8')
+  const actualHash = createHash('sha256').update(content).digest('hex')
+  if (!assetHashes['misc/file-icons-match.js']) {
+    throw new Error('Asset hash not available — file may have been added after startup')
+  }
+  if (actualHash !== assetHashes['misc/file-icons-match.js']) {
+    throw new Error('Asset integrity check failed: file-icons-match.js has been tampered with')
+  }
+  const { createRequire } = await import('module')
+  const req = createRequire(resolved)
+  return req(resolved)
+})
 ipcMain.handle('readFileBinary', (_event, filePath) => {
-  const resolved = validatePath(filePath)
+  const resolved = validatePath(filePath, userData)
   return readFileSync(resolved).toString('base64')
 })
 ipcMain.handle('getTheme', (_event, name) => {
-  if (typeof name !== 'string' || name.includes('\0') || name.includes('..')) {
-    throw new Error('Invalid path')
-  }
-  const absPath = join(themesDir, name + '.json')
-  const resolved = validateWithin(absPath, themesDir)
+  const resolved = validateAndResolve(name + '.json', themesDir)
   return JSON.parse(readFileSync(resolved, 'utf-8'))
 })
 ipcMain.handle('getKeyboardLayout', (_event, name) => {
-  if (typeof name !== 'string' || name.includes('\0') || name.includes('..')) {
-    throw new Error('Invalid path')
-  }
-  const absPath = join(kblayoutsDir, name)
-  const resolved = validateWithin(absPath, kblayoutsDir)
+  const resolved = validateAndResolve(name, kblayoutsDir)
   return JSON.parse(readFileSync(resolved, 'utf-8'))
 })
 ipcMain.handle('getAudioUrl', (_event, filename) => {
-  if (typeof filename !== 'string' || filename.includes('\0') || filename.includes('..')) {
-    throw new Error('Invalid path')
-  }
-  const absPath = join(userData, 'assets', 'audio', filename)
-  const resolved = validateWithin(absPath, join(userData, 'assets', 'audio'))
+  validateAndResolve(filename, join(userData, 'assets', 'audio'))
   return `edex-audio://${filename}`
 })
 ipcMain.handle('getAudioPath', (_event, filename) => {
-  if (typeof filename !== 'string' || filename.includes('\0') || filename.includes('..')) {
-    throw new Error('Invalid path')
-  }
-  const absPath = join(userData, 'assets', 'audio', filename)
-  const resolved = validateWithin(absPath, join(userData, 'assets', 'audio'))
-  return resolved
+  return validateAndResolve(filename, join(userData, 'assets', 'audio'))
 })
 ipcMain.handle('getThemePath', (_event, name) => {
-  if (typeof name !== 'string' || name.includes('\0') || name.includes('..')) {
-    throw new Error('Invalid path')
-  }
-  const absPath = join(themesDir, name)
-  const resolved = validateWithin(absPath, themesDir)
-  return resolved
+  return validateAndResolve(name, themesDir)
 })
 ipcMain.handle('getKeyboardPath', (_event, name) => {
-  if (typeof name !== 'string' || name.includes('\0') || name.includes('..')) {
-    throw new Error('Invalid path')
-  }
-  const absPath = join(kblayoutsDir, name)
-  const resolved = validateWithin(absPath, kblayoutsDir)
-  return resolved
+  return validateAndResolve(name, kblayoutsDir)
 })
 
 // --- Theme/keyboard override IPC ---
@@ -291,39 +281,7 @@ ipcMain.handle('getKbOverride', () => kbOverride)
 ipcMain.on('setThemeOverride', (_e, arg) => { themeOverride = arg })
 ipcMain.on('setKbOverride', (_e, arg) => { kbOverride = arg })
 
-// --- Path validation ---
-function validateWithin(filePath, allowedDir) {
-  if (typeof filePath !== 'string' || filePath.includes('\0')) {
-    throw new Error('Invalid path')
-  }
-  const absPath = filePath
-  const allowed = resolve(allowedDir)
-  let resolved
-  try { resolved = realpathSync(absPath) } catch { resolved = resolve(absPath) }
-  const rel = relative(allowed, resolved)
-  // rel === '' guards against empty filenames resolving to the allowed directory itself
-  // so resolved path cannot equal the allowed directory
-  if (rel.startsWith('..') || isAbsolute(rel) || rel === '') {
-    throw new Error('Access denied: path outside allowed directory')
-  }
-  return resolved
-}
-function validatePath(filePath) {
-  if (typeof filePath !== 'string' || filePath.includes('\0')) {
-    throw new Error('Invalid path')
-  }
-  let resolved
-  try {
-    resolved = realpathSync(filePath)
-  } catch {
-    resolved = resolve(filePath) // file doesn't exist yet, use resolve
-  }
-  const allowedBase = resolve(userData)
-  if (resolved === allowedBase || resolved.startsWith(allowedBase + sep)) {
-    return resolved // allowed
-  }
-  throw new Error('Access denied: path outside allowed directory')
-}
+// --- Path validation --- (moved to ipc-validation.js)
 
 // --- Filesystem IPC ---
 // readdir and stat are intentionally unrestricted (no validatePath) to support
@@ -361,18 +319,18 @@ ipcMain.handle('stat', (_event, filePath) => {
 })
 
 ipcMain.handle('readFile', (_event, filePath, encoding) => {
-  const resolved = validatePath(filePath)
+  const resolved = validatePath(filePath, userData)
   return readFileSync(resolved, encoding || 'utf-8')
 })
 
 ipcMain.handle('writeFile', (_event, filePath, content) => {
-  const resolved = validatePath(filePath)
+  const resolved = validatePath(filePath, userData)
   writeFileSync(resolved, content)
 })
 
 let fsWatchers = {}
 ipcMain.handle('watchDirectory', async (_event, dirPath) => {
-  const resolved = validatePath(dirPath)
+  const resolved = validatePath(dirPath, userData)
   if (fsWatchers[resolved]) return
   try {
     const watcher = watch(resolved, () => {
@@ -418,12 +376,52 @@ ipcMain.handle('terminal:create', async (_event, options) => {
     TERM_PROGRAM_VERSION: app.getVersion()
   })
 
+  // Trusted shell directories — resolved shell must be in one of these
+  const TRUSTED_SHELL_DIRS = [
+    '/bin/', '/usr/bin/', '/usr/local/bin/',
+    '/opt/homebrew/bin/',
+    '/run/current-system/sw/bin/',
+    '/snap/bin/',
+  ]
+  const TRUSTED_WINDOWS_SHELLS = ['powershell.exe', 'cmd.exe', 'pwsh.exe']
+
+  function isShellAllowed(resolvedPath) {
+    const base = basename(resolvedPath).toLowerCase()
+    if (TRUSTED_WINDOWS_SHELLS.includes(base)) return true
+    return TRUSTED_SHELL_DIRS.some(dir => resolvedPath.startsWith(dir))
+  }
+
+  const requestedShell = options.shell || settings.shell;
+  const resolvedShell = await which(requestedShell).catch(() => null);
+  let shell = settings.shell; // default
+  if (resolvedShell && isShellAllowed(resolvedShell)) {
+    shell = resolvedShell;
+  } else {
+    const fallbackResolved = await which(settings.shell).catch(() => null);
+    if (fallbackResolved && isShellAllowed(fallbackResolved)) {
+      shell = fallbackResolved;
+    } else {
+      throw new Error('No allowed shell available: both requested and configured shells failed allowlist validation');
+    }
+  }
+
+  // Sanitize params - reject shell metacharacters and dangerous flags
+  const rawParams = options.params || settings.shellArgs || [];
+  for (const p of rawParams) {
+    if (typeof p !== 'string' || /[;&|`$(){}!<>~\\\'\"\n\r\#\t\u0000]/.test(p)) {
+      throw new Error('Invalid shell parameter: contains forbidden characters');
+    }
+    if (/^(?!-)-?[a-zA-Z]*[cC]|^[-/]c$|^--command/.test(p)) {
+      throw new Error('Invalid shell parameter: -c flag not allowed');
+    }
+  }
+  const params = rawParams;
   const id = nextTerminalId++
   const session = new TerminalSession({
     id,
-    shell: options.shell || settings.shell,
-    params: options.params || settings.shellArgs || [],
-    cwd: options.cwd || settings.cwd,
+    shell,
+    params,
+    cwd: options.cwd ? validatePath(options.cwd, userData) : settings.cwd,
     env: cleanEnv,
     ondata: (_id, data) => {
       if (mainWindow && !mainWindow.isDestroyed()) {
@@ -548,15 +546,15 @@ app.whenReady().then(async () => {
   // Register custom protocol for audio files (file:// blocked from http origins)
   protocol.handle('edex-audio', (request) => {
     const raw = decodeURIComponent(request.url.replace('edex-audio://', ''))
-    if (typeof raw !== 'string' || raw.includes('\0') || raw.includes('..')) {
+    try {
+      validateFilename(raw)
+    } catch {
       return new Response('Invalid path', { status: 400 })
     }
-    const filePath = join(userData, 'assets', 'audio', raw)
-    const audioDir = resolve(join(userData, 'assets', 'audio'))
     let resolved
-    try { resolved = realpathSync(filePath) } catch { resolved = resolve(filePath) }
-    const rel = relative(audioDir, resolved)
-    if (rel.startsWith('..') || isAbsolute(rel)) {
+    try {
+      resolved = validateWithin(join(userData, 'assets', 'audio', raw), join(userData, 'assets', 'audio'))
+    } catch {
       return new Response('Path traversal', { status: 403 })
     }
     return net.fetch(pathToFileURL(resolved).href)
