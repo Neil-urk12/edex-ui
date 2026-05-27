@@ -1,6 +1,6 @@
 import { app, BrowserWindow, ipcMain, shell, screen, clipboard, globalShortcut, dialog, protocol, net } from 'electron'
-import { join, dirname } from 'path'
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, lstatSync, readFile, writeFile, watch } from 'fs'
+import { join, dirname, resolve, relative, sep, isAbsolute, extname } from 'path'
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, lstatSync, watch, realpathSync } from 'fs'
 import { fileURLToPath, pathToFileURL } from 'url'
 import which from 'which'
 import shellEnv from 'shell-env'
@@ -151,14 +151,41 @@ ipcMain.handle('saveSettings', (_event, partial) => {
   return settings
 })
 
+const SAFE_OPEN_EXTENSIONS = [
+  // Original
+  '.txt', '.json', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.pdf', '.md', '.html', '.css', '.js', '.wav', '.mp3', '.ogg',
+  // Data
+  '.log', '.csv', '.tsv', '.xml', '.yaml', '.yml', '.toml', '.ini', '.cfg', '.conf',
+  // Media
+  '.svg', '.mp4', '.webm', '.mkv', '.avi', '.mov', '.flac', '.m4a', '.aac', '.opus', '.bmp', '.tiff', '.ico', '.avif',
+  // Documents
+  '.rtf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.odt', '.ods', '.odp',
+  // Archives
+  '.zip', '.tar', '.gz', '.bz2', '.xz', '.7z', '.rar',
+  // Web
+  '.jsx', '.tsx', '.ts', '.vue', '.svelte', '.astro', '.scss', '.less', '.sass',
+]
 // --- App API IPC ---
 ipcMain.handle('getAppVersion', () => app.getVersion())
-ipcMain.handle('getAppPath', (_event, name) => app.getPath(name))
+const ALLOWED_APP_PATHS = ['home', 'appData', 'userData', 'desktop', 'documents', 'downloads', 'temp', 'logs', 'crashDumps']
+ipcMain.handle('getAppPath', (_event, name) => {
+  if (!ALLOWED_APP_PATHS.includes(name)) {
+    throw new Error('Invalid path name: not allowed')
+  }
+  return app.getPath(name)
+})
 ipcMain.handle('quitApp', () => app.quit())
 ipcMain.handle('getDisplays', () => screen.getAllDisplays().map(d => ({ id: d.id, bounds: d.bounds, workArea: d.workArea })))
 ipcMain.handle('getClipboardText', () => clipboard.readText())
 ipcMain.handle('setClipboardText', (_event, text) => clipboard.writeText(text))
-ipcMain.handle('openPath', (_event, path) => shell.openPath(path))
+ipcMain.handle('openPath', (_event, path) => {
+  validatePath(path)
+  const ext = extname(path).toLowerCase()
+  if (ext && !SAFE_OPEN_EXTENSIONS.includes(ext)) {
+    throw new Error('File type not allowed')
+  }
+  return shell.openPath(path)
+})
 ipcMain.handle('toggleFullscreen', () => {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.setFullScreen(!mainWindow.isFullScreen())
@@ -182,27 +209,99 @@ ipcMain.handle('unregisterShortcut', (_event, accelerator) => {
 
 // --- Asset content IPC ---
 ipcMain.handle('readAsset', (_event, relativePath) => {
+  if (typeof relativePath !== 'string' || relativePath.includes('\0')) throw new Error('Invalid path')
+  if (!relativePath || relativePath.trim() === '') throw new Error('Invalid path: empty')
   const absPath = join(userData, 'assets', relativePath)
+  const assetsDir = resolve(join(userData, 'assets'))
+  let absResolved
+  try { absResolved = realpathSync(absPath) } catch { absResolved = resolve(absPath) }
+  const rel = relative(assetsDir, absResolved)
+  if (rel.startsWith('..') || isAbsolute(rel) || rel === '') {
+    throw new Error('Path traversal detected')
+  }
   return readFileSync(absPath, 'utf-8')
 })
 ipcMain.handle('readFileBinary', (_event, filePath) => {
+  validatePath(filePath)
   return readFileSync(filePath).toString('base64')
 })
 ipcMain.handle('getTheme', (_event, name) => {
+  if (typeof name !== 'string' || name.includes('\0') || name.includes('..')) {
+    throw new Error('Invalid path')
+  }
   const absPath = join(themesDir, name + '.json')
+  const allowedDir = resolve(themesDir)
+  let resolved
+  try { resolved = realpathSync(absPath) } catch { resolved = resolve(absPath) }
+  const rel = relative(allowedDir, resolved)
+  if (rel.startsWith('..') || isAbsolute(rel)) {
+    throw new Error('Access denied: path outside allowed directory')
+  }
   return JSON.parse(readFileSync(absPath, 'utf-8'))
 })
 ipcMain.handle('getKeyboardLayout', (_event, name) => {
+  if (typeof name !== 'string' || name.includes('\0') || name.includes('..')) {
+    throw new Error('Invalid path')
+  }
   const absPath = join(kblayoutsDir, name)
+  const allowedDir = resolve(kblayoutsDir)
+  let resolved
+  try { resolved = realpathSync(absPath) } catch { resolved = resolve(absPath) }
+  const rel = relative(allowedDir, resolved)
+  if (rel.startsWith('..') || isAbsolute(rel)) {
+    throw new Error('Access denied: path outside allowed directory')
+  }
   return JSON.parse(readFileSync(absPath, 'utf-8'))
 })
 ipcMain.handle('getAudioUrl', (_event, filename) => {
+  if (typeof filename !== 'string' || filename.includes('\0') || filename.includes('..')) {
+    throw new Error('Invalid path')
+  }
   const absPath = join(userData, 'assets', 'audio', filename)
   return `edex-audio://${filename}`
 })
-ipcMain.handle('getAudioPath', (_event, filename) => join(userData, 'assets', 'audio', filename))
-ipcMain.handle('getThemePath', (_event, name) => join(themesDir, name))
-ipcMain.handle('getKeyboardPath', (_event, name) => join(kblayoutsDir, name))
+ipcMain.handle('getAudioPath', (_event, filename) => {
+  if (typeof filename !== 'string' || filename.includes('\0') || filename.includes('..')) {
+    throw new Error('Invalid path')
+  }
+  const absPath = join(userData, 'assets', 'audio', filename)
+  const allowedDir = resolve(join(userData, 'assets', 'audio'))
+  let resolved
+  try { resolved = realpathSync(absPath) } catch { resolved = resolve(absPath) }
+  const rel = relative(allowedDir, resolved)
+  if (rel.startsWith('..') || isAbsolute(rel)) {
+    throw new Error('Access denied: path outside allowed directory')
+  }
+  return absPath
+})
+ipcMain.handle('getThemePath', (_event, name) => {
+  if (typeof name !== 'string' || name.includes('\0') || name.includes('..')) {
+    throw new Error('Invalid path')
+  }
+  const absPath = join(themesDir, name)
+  const allowedDir = resolve(themesDir)
+  let resolved
+  try { resolved = realpathSync(absPath) } catch { resolved = resolve(absPath) }
+  const rel = relative(allowedDir, resolved)
+  if (rel.startsWith('..') || isAbsolute(rel)) {
+    throw new Error('Access denied: path outside allowed directory')
+  }
+  return absPath
+})
+ipcMain.handle('getKeyboardPath', (_event, name) => {
+  if (typeof name !== 'string' || name.includes('\0') || name.includes('..')) {
+    throw new Error('Invalid path')
+  }
+  const absPath = join(kblayoutsDir, name)
+  const allowedDir = resolve(kblayoutsDir)
+  let resolved
+  try { resolved = realpathSync(absPath) } catch { resolved = resolve(absPath) }
+  const rel = relative(allowedDir, resolved)
+  if (rel.startsWith('..') || isAbsolute(rel)) {
+    throw new Error('Access denied: path outside allowed directory')
+  }
+  return absPath
+})
 
 // --- Theme/keyboard override IPC ---
 let themeOverride = null
@@ -212,9 +311,28 @@ ipcMain.handle('getKbOverride', () => kbOverride)
 ipcMain.on('setThemeOverride', (_e, arg) => { themeOverride = arg })
 ipcMain.on('setKbOverride', (_e, arg) => { kbOverride = arg })
 
+// --- Path validation ---
+function validatePath(filePath) {
+  if (typeof filePath !== 'string' || filePath.includes('\0')) {
+    throw new Error('Invalid path')
+  }
+  let resolved
+  try {
+    resolved = realpathSync(filePath)
+  } catch {
+    resolved = resolve(filePath) // file doesn't exist yet, use resolve
+  }
+  const allowedBase = resolve(userData)
+  if (resolved === allowedBase || resolved.startsWith(allowedBase + sep)) {
+    return // allowed
+  }
+  throw new Error('Access denied: path outside allowed directory')
+}
+
 // --- Filesystem IPC ---
 ipcMain.handle('readdir', async (_event, dirPath) => {
   if (!dirPath) return []
+  validatePath(dirPath)
   try {
     return readdirSync(dirPath)
   } catch (e) {
@@ -229,6 +347,7 @@ ipcMain.handle('readdir', async (_event, dirPath) => {
 
 ipcMain.handle('stat', async (_event, filePath) => {
   if (!filePath) return null
+  validatePath(filePath)
   try {
     const stat = lstatSync(filePath)
     return { isFile: stat.isFile(), isDirectory: stat.isDirectory(), isSymbolicLink: stat.isSymbolicLink(), size: stat.size, mtime: stat.mtime.getTime() }
@@ -243,15 +362,18 @@ ipcMain.handle('stat', async (_event, filePath) => {
 })
 
 ipcMain.handle('readFile', async (_event, filePath, encoding) => {
+  validatePath(filePath)
   return readFileSync(filePath, encoding || 'utf-8')
 })
 
 ipcMain.handle('writeFile', async (_event, filePath, content) => {
+  validatePath(filePath)
   writeFileSync(filePath, content)
 })
 
 let fsWatchers = {}
 ipcMain.handle('watchDirectory', async (_event, dirPath) => {
+  validatePath(dirPath)
   if (fsWatchers[dirPath]) return
   try {
     const watcher = watch(dirPath, () => {
@@ -275,6 +397,7 @@ ipcMain.handle('getBlockDevices', () => si.blockDevices())
 ipcMain.handle('getFsSize', () => si.fsSize())
 ipcMain.handle('getSystemInfo', () => si.system())
 ipcMain.handle('getChassisInfo', () => si.chassis())
+ipcMain.handle('getSystemUptime', () => si.time())
 
 // --- Terminal PTY management ---
 const terminals = new Map()
@@ -425,8 +548,19 @@ protocol.registerSchemesAsPrivileged([
 app.whenReady().then(async () => {
   // Register custom protocol for audio files (file:// blocked from http origins)
   protocol.handle('edex-audio', (request) => {
-    const filePath = join(userData, 'assets', 'audio', decodeURIComponent(request.url.replace('edex-audio://', '')))
-    return net.fetch(pathToFileURL(filePath).href)
+    const raw = decodeURIComponent(request.url.replace('edex-audio://', ''))
+    if (typeof raw !== 'string' || raw.includes('\0') || raw.includes('..')) {
+      return new Response('Invalid path', { status: 400 })
+    }
+    const filePath = join(userData, 'assets', 'audio', raw)
+    const audioDir = resolve(join(userData, 'assets', 'audio'))
+    let resolved
+    try { resolved = realpathSync(filePath) } catch { resolved = resolve(filePath) }
+    const rel = relative(audioDir, resolved)
+    if (rel.startsWith('..') || isAbsolute(rel)) {
+      return new Response('Path traversal', { status: 403 })
+    }
+    return net.fetch(pathToFileURL(resolved).href)
   })
   let settings = defaultSettings
   try { settings = JSON.parse(readFileSync(settingsFile, 'utf-8')) } catch (_) {}

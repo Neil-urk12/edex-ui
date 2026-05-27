@@ -12,5 +12,6 @@ export const systemAPI = {
   getBlockDevices: () => ipcRenderer.invoke('getBlockDevices'),
   getFsSize: () => ipcRenderer.invoke('getFsSize'),
   getSystemInfo: () => ipcRenderer.invoke('getSystemInfo'),
-  getChassisInfo: () => ipcRenderer.invoke('getChassisInfo')
+  getChassisInfo: () => ipcRenderer.invoke('getChassisInfo'),
+  getSystemUptime: () => ipcRenderer.invoke('getSystemUptime')
 }

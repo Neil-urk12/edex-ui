@@ -166,7 +166,13 @@ class FilesystemDisplay {
                 content = await window.electronAPI.readdir(tcwd);
             } catch (err) {
                 console.warn(err);
-                if (this._noTracking === true && this.dirpath) {
+                const msg = String(err.message || err);
+                if (msg.includes('Access denied') || msg.includes('outside allowed')) {
+                    container.innerHTML = `
+                        <h3 class="title"><p>FILESYSTEM</p><p id="fs_disp_title_dir">ACCESS DENIED</p></h3>
+                        <h2 id="fs_disp_error">PATH OUTSIDE ALLOWED DIRECTORY</h2>`;
+                    this.failed = true;
+                } else if (this._noTracking === true && this.dirpath) {
                     this.setFailedState();
                     setTimeout(() => {
                         this.readFS(this.dirpath);
@@ -638,12 +644,18 @@ class FilesystemDisplay {
                             html: html
                         }
                     );
-                    new DocReader(
-                        {
+                    if (typeof DocReader !== 'undefined') {
+                        new DocReader({
                             modalId: newModal.id,
                             path: block.path
-                        }
-                    );
+                        });
+                    } else {
+                        new Modal({
+                            type: "info",
+                            title: "Feature not available",
+                            message: "PDF reader has not been ported to the new architecture yet."
+                        });
+                    }
                     break;
                 default:
                     // Try to read as UTF-8 text
@@ -770,11 +782,19 @@ class FilesystemDisplay {
                 html
             });
             if (block.type === "audio" || block.type === "video") {
-                new MediaPlayer({
+                if (typeof MediaPlayer !== 'undefined') {
+                    new MediaPlayer({
                     modalId: newModal.id,
                     path: block.path,
                     type: block.type
                 });
+                } else {
+                    new Modal({
+                        type: "info",
+                        title: "Feature not available",
+                        message: "Media player has not been ported to the new architecture yet."
+                    });
+                }
             }
         };
     }
