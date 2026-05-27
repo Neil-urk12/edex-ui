@@ -765,4 +765,134 @@ describe('Security: edex-audio protocol TOCTOU fix', () => {
       expect(fsModule.writeFileSync).toBeDefined()
     })
   })
+
+  // --- Security: readdir and stat unrestricted access ---
+  describe('Security: readdir and stat allow arbitrary paths', () => {
+    beforeEach(() => {
+      vi.clearAllMocks()
+      vi.resetModules()
+      mockExistsSync.mockReturnValue(true)
+      mockReadFileSync.mockReturnValue('{}')
+      mockReaddirSync.mockReturnValue([])
+      mockLstatSync.mockReturnValue({
+        isFile: () => true,
+        isDirectory: () => false,
+        isSymbolicLink: () => false,
+        size: 42,
+        mtime: new Date('2024-01-15T10:30:00Z'),
+      })
+      mockRealpathSync.mockImplementation(p => p)
+    })
+
+    it('readdir works for paths outside userData (e.g. /tmp)', async () => {
+      mockReaddirSync.mockReturnValue(['file1.txt', 'file2.txt'])
+      await loadModule()
+      const readdir = getHandler('readdir')
+      const result = await readdir({}, '/tmp/some/dir')
+      expect(result).toEqual(['file1.txt', 'file2.txt'])
+    })
+
+    it('stat works for paths outside userData (e.g. /etc)', async () => {
+      await loadModule()
+      const stat = getHandler('stat')
+      const result = await stat({}, '/etc/hostname')
+      expect(result).toBeTruthy()
+      expect(result.isFile).toBe(true)
+    })
+
+    it('readdir still rejects null bytes', async () => {
+      await loadModule()
+      const readdir = getHandler('readdir')
+      expect(() => readdir({}, '/tmp/file\0evil')).toThrow(/Invalid/)
+    })
+
+    it('stat still rejects null bytes', async () => {
+      await loadModule()
+      const stat = getHandler('stat')
+      expect(() => stat({}, '/tmp/file\0evil')).toThrow(/Invalid/)
+    })
+  })
+
+  // --- Security: getAudioUrl input validation ---
+  describe('Security: getAudioUrl input validation', () => {
+    beforeEach(() => {
+      vi.clearAllMocks()
+      vi.resetModules()
+      mockExistsSync.mockReturnValue(true)
+      mockReadFileSync.mockReturnValue('{}')
+      mockReaddirSync.mockReturnValue([])
+      mockLstatSync.mockReturnValue({
+        isFile: () => true,
+        isDirectory: () => false,
+        isSymbolicLink: () => false,
+        size: 42,
+        mtime: new Date('2024-01-15T10:30:00Z'),
+      })
+      mockRealpathSync.mockImplementation(p => p)
+    })
+
+    it('rejects null bytes in filename', async () => {
+      await loadModule()
+      const handler = getHandler('getAudioUrl')
+      expect(() => handler({}, 'file\0evil.mp3')).toThrow(/Invalid/)
+    })
+
+    it('rejects path traversal via ..', async () => {
+      await loadModule()
+      const handler = getHandler('getAudioUrl')
+      expect(() => handler({}, '../../etc/passwd')).toThrow(/Invalid|traversal/)
+    })
+
+    it('allows valid audio filename', async () => {
+      await loadModule()
+      const handler = getHandler('getAudioUrl')
+      const result = handler({}, 'click.mp3')
+      expect(result).toContain('click.mp3')
+    })
+  })
+
+  // --- Security: readFile and writeFile restricted to userData ---
+  describe('Security: readFile and writeFile restricted to userData', () => {
+    beforeEach(() => {
+      vi.clearAllMocks()
+      vi.resetModules()
+      mockExistsSync.mockReturnValue(true)
+      mockReadFileSync.mockReturnValue('{}')
+      mockReaddirSync.mockReturnValue([])
+      mockLstatSync.mockReturnValue({
+        isFile: () => true,
+        isDirectory: () => false,
+        isSymbolicLink: () => false,
+        size: 42,
+        mtime: new Date('2024-01-15T10:30:00Z'),
+      })
+      mockRealpathSync.mockImplementation(p => p)
+    })
+
+    it('readFile rejects paths outside userData', async () => {
+      await loadModule()
+      const handler = getHandler('readFile')
+      expect(() => handler({}, '/etc/passwd', 'utf-8')).toThrow(/denied|outside/)
+    })
+
+    it('writeFile rejects paths outside userData', async () => {
+      await loadModule()
+      const handler = getHandler('writeFile')
+      expect(() => handler({}, '/etc/crontab', 'evil')).toThrow(/denied|outside/)
+    })
+
+    it('readFile allows paths inside userData', async () => {
+      mockReadFileSync.mockReturnValue('hello')
+      await loadModule()
+      const handler = getHandler('readFile')
+      const result = handler({}, '/tmp/test-userdata/file.txt', 'utf-8')
+      expect(result).toBe('hello')
+    })
+
+    it('writeFile allows paths inside userData', async () => {
+      await loadModule()
+      const handler = getHandler('writeFile')
+      expect(() => handler({}, '/tmp/test-userdata/file.txt', 'data')).not.toThrow()
+    })
+  })
 })

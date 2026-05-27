@@ -179,12 +179,12 @@ ipcMain.handle('getDisplays', () => screen.getAllDisplays().map(d => ({ id: d.id
 ipcMain.handle('getClipboardText', () => clipboard.readText())
 ipcMain.handle('setClipboardText', (_event, text) => clipboard.writeText(text))
 ipcMain.handle('openPath', (_event, path) => {
-  validatePath(path)
-  const ext = extname(path).toLowerCase()
+  const resolved = validatePath(path)
+  const ext = extname(resolved).toLowerCase()
   if (ext && !SAFE_OPEN_EXTENSIONS.includes(ext)) {
     throw new Error('File type not allowed')
   }
-  return shell.openPath(path)
+  return shell.openPath(resolved)
 })
 ipcMain.handle('toggleFullscreen', () => {
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -219,11 +219,11 @@ ipcMain.handle('readAsset', (_event, relativePath) => {
   if (rel.startsWith('..') || isAbsolute(rel) || rel === '') {
     throw new Error('Path traversal detected')
   }
-  return readFileSync(absPath, 'utf-8')
+  return readFileSync(absResolved, 'utf-8')
 })
 ipcMain.handle('readFileBinary', (_event, filePath) => {
-  validatePath(filePath)
-  return readFileSync(filePath).toString('base64')
+  const resolved = validatePath(filePath)
+  return readFileSync(resolved).toString('base64')
 })
 ipcMain.handle('getTheme', (_event, name) => {
   if (typeof name !== 'string' || name.includes('\0') || name.includes('..')) {
@@ -237,7 +237,7 @@ ipcMain.handle('getTheme', (_event, name) => {
   if (rel.startsWith('..') || isAbsolute(rel)) {
     throw new Error('Access denied: path outside allowed directory')
   }
-  return JSON.parse(readFileSync(absPath, 'utf-8'))
+  return JSON.parse(readFileSync(resolved, 'utf-8'))
 })
 ipcMain.handle('getKeyboardLayout', (_event, name) => {
   if (typeof name !== 'string' || name.includes('\0') || name.includes('..')) {
@@ -251,13 +251,21 @@ ipcMain.handle('getKeyboardLayout', (_event, name) => {
   if (rel.startsWith('..') || isAbsolute(rel)) {
     throw new Error('Access denied: path outside allowed directory')
   }
-  return JSON.parse(readFileSync(absPath, 'utf-8'))
+  return JSON.parse(readFileSync(resolved, 'utf-8'))
 })
 ipcMain.handle('getAudioUrl', (_event, filename) => {
   if (typeof filename !== 'string' || filename.includes('\0') || filename.includes('..')) {
     throw new Error('Invalid path')
   }
   const absPath = join(userData, 'assets', 'audio', filename)
+  // Verify the resolved path is within the audio directory
+  const audioDir = resolve(join(userData, 'assets', 'audio'))
+  let resolved
+  try { resolved = realpathSync(absPath) } catch { resolved = resolve(absPath) }
+  const rel = relative(audioDir, resolved)
+  if (rel.startsWith('..') || isAbsolute(rel)) {
+    throw new Error('Invalid path: traversal detected')
+  }
   return `edex-audio://${filename}`
 })
 ipcMain.handle('getAudioPath', (_event, filename) => {
@@ -324,15 +332,18 @@ function validatePath(filePath) {
   }
   const allowedBase = resolve(userData)
   if (resolved === allowedBase || resolved.startsWith(allowedBase + sep)) {
-    return // allowed
+    return resolved // allowed
   }
   throw new Error('Access denied: path outside allowed directory')
 }
 
 // --- Filesystem IPC ---
-ipcMain.handle('readdir', async (_event, dirPath) => {
+// readdir and stat are intentionally unrestricted (no validatePath) to support
+// the built-in filesystem browser which navigates arbitrary paths. Only null-byte
+// injection is blocked. readFile/writeFile remain restricted to userData.
+ipcMain.handle('readdir', (_event, dirPath) => {
   if (!dirPath) return []
-  validatePath(dirPath)
+  if (typeof dirPath !== 'string' || dirPath.includes('\0')) throw new Error('Invalid path')
   try {
     return readdirSync(dirPath)
   } catch (e) {
@@ -341,13 +352,13 @@ ipcMain.handle('readdir', async (_event, dirPath) => {
       return []
     }
     if (e.code === 'ENOENT' || e.code === 'EBUSY') return []
-    throw e
+    return Promise.reject(e)
   }
 })
 
-ipcMain.handle('stat', async (_event, filePath) => {
+ipcMain.handle('stat', (_event, filePath) => {
   if (!filePath) return null
-  validatePath(filePath)
+  if (typeof filePath !== 'string' || filePath.includes('\0')) throw new Error('Invalid path')
   try {
     const stat = lstatSync(filePath)
     return { isFile: stat.isFile(), isDirectory: stat.isDirectory(), isSymbolicLink: stat.isSymbolicLink(), size: stat.size, mtime: stat.mtime.getTime() }
@@ -357,30 +368,30 @@ ipcMain.handle('stat', async (_event, filePath) => {
       return null
     }
     if (e.code === 'ENOENT' || e.code === 'EBUSY') return null
-    throw e
+    return Promise.reject(e)
   }
 })
 
-ipcMain.handle('readFile', async (_event, filePath, encoding) => {
-  validatePath(filePath)
-  return readFileSync(filePath, encoding || 'utf-8')
+ipcMain.handle('readFile', (_event, filePath, encoding) => {
+  const resolved = validatePath(filePath)
+  return readFileSync(resolved, encoding || 'utf-8')
 })
 
-ipcMain.handle('writeFile', async (_event, filePath, content) => {
-  validatePath(filePath)
-  writeFileSync(filePath, content)
+ipcMain.handle('writeFile', (_event, filePath, content) => {
+  const resolved = validatePath(filePath)
+  writeFileSync(resolved, content)
 })
 
 let fsWatchers = {}
 ipcMain.handle('watchDirectory', async (_event, dirPath) => {
-  validatePath(dirPath)
-  if (fsWatchers[dirPath]) return
+  const resolved = validatePath(dirPath)
+  if (fsWatchers[resolved]) return
   try {
-    const watcher = watch(dirPath, () => {
+    const watcher = watch(resolved, () => {
       const win = BrowserWindow.getAllWindows()[0]
       if (win) win.webContents.send('fs-changed', 'change')
     })
-    fsWatchers[dirPath] = watcher
+    fsWatchers[resolved] = watcher
   } catch (_) {}
 })
 
