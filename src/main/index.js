@@ -143,10 +143,13 @@ ipcMain.handle('getSettings', () => {
   return settings
 })
 
+const SETTINGS_BLOCKLIST = ['shell', 'shellArgs', 'cwd', 'settingsDir', 'themesPath', 'kbLayoutPath', 'settingsFile']
 ipcMain.handle('saveSettings', (_event, partial) => {
-  let settings = defaultSettings
-  try { settings = JSON.parse(readFileSync(settingsFile, 'utf-8')) } catch (_) {}
-  Object.assign(settings, partial)
+  let settings = { ...defaultSettings }
+  try { Object.assign(settings, JSON.parse(readFileSync(settingsFile, 'utf-8'))) } catch (_) {}
+  const safe = { ...partial }
+  for (const key of SETTINGS_BLOCKLIST) delete safe[key]
+  Object.assign(settings, safe)
   writeFileSync(settingsFile, JSON.stringify(settings, null, 4))
   return settings
 })
@@ -230,13 +233,7 @@ ipcMain.handle('getTheme', (_event, name) => {
     throw new Error('Invalid path')
   }
   const absPath = join(themesDir, name + '.json')
-  const allowedDir = resolve(themesDir)
-  let resolved
-  try { resolved = realpathSync(absPath) } catch { resolved = resolve(absPath) }
-  const rel = relative(allowedDir, resolved)
-  if (rel.startsWith('..') || isAbsolute(rel)) {
-    throw new Error('Access denied: path outside allowed directory')
-  }
+  const resolved = validateWithin(absPath, themesDir)
   return JSON.parse(readFileSync(resolved, 'utf-8'))
 })
 ipcMain.handle('getKeyboardLayout', (_event, name) => {
@@ -244,13 +241,7 @@ ipcMain.handle('getKeyboardLayout', (_event, name) => {
     throw new Error('Invalid path')
   }
   const absPath = join(kblayoutsDir, name)
-  const allowedDir = resolve(kblayoutsDir)
-  let resolved
-  try { resolved = realpathSync(absPath) } catch { resolved = resolve(absPath) }
-  const rel = relative(allowedDir, resolved)
-  if (rel.startsWith('..') || isAbsolute(rel)) {
-    throw new Error('Access denied: path outside allowed directory')
-  }
+  const resolved = validateWithin(absPath, kblayoutsDir)
   return JSON.parse(readFileSync(resolved, 'utf-8'))
 })
 ipcMain.handle('getAudioUrl', (_event, filename) => {
@@ -258,14 +249,7 @@ ipcMain.handle('getAudioUrl', (_event, filename) => {
     throw new Error('Invalid path')
   }
   const absPath = join(userData, 'assets', 'audio', filename)
-  // Verify the resolved path is within the audio directory
-  const audioDir = resolve(join(userData, 'assets', 'audio'))
-  let resolved
-  try { resolved = realpathSync(absPath) } catch { resolved = resolve(absPath) }
-  const rel = relative(audioDir, resolved)
-  if (rel.startsWith('..') || isAbsolute(rel)) {
-    throw new Error('Invalid path: traversal detected')
-  }
+  const resolved = validateWithin(absPath, join(userData, 'assets', 'audio'))
   return `edex-audio://${filename}`
 })
 ipcMain.handle('getAudioPath', (_event, filename) => {
@@ -273,42 +257,24 @@ ipcMain.handle('getAudioPath', (_event, filename) => {
     throw new Error('Invalid path')
   }
   const absPath = join(userData, 'assets', 'audio', filename)
-  const allowedDir = resolve(join(userData, 'assets', 'audio'))
-  let resolved
-  try { resolved = realpathSync(absPath) } catch { resolved = resolve(absPath) }
-  const rel = relative(allowedDir, resolved)
-  if (rel.startsWith('..') || isAbsolute(rel)) {
-    throw new Error('Access denied: path outside allowed directory')
-  }
-  return absPath
+  const resolved = validateWithin(absPath, join(userData, 'assets', 'audio'))
+  return resolved
 })
 ipcMain.handle('getThemePath', (_event, name) => {
   if (typeof name !== 'string' || name.includes('\0') || name.includes('..')) {
     throw new Error('Invalid path')
   }
   const absPath = join(themesDir, name)
-  const allowedDir = resolve(themesDir)
-  let resolved
-  try { resolved = realpathSync(absPath) } catch { resolved = resolve(absPath) }
-  const rel = relative(allowedDir, resolved)
-  if (rel.startsWith('..') || isAbsolute(rel)) {
-    throw new Error('Access denied: path outside allowed directory')
-  }
-  return absPath
+  const resolved = validateWithin(absPath, themesDir)
+  return resolved
 })
 ipcMain.handle('getKeyboardPath', (_event, name) => {
   if (typeof name !== 'string' || name.includes('\0') || name.includes('..')) {
     throw new Error('Invalid path')
   }
   const absPath = join(kblayoutsDir, name)
-  const allowedDir = resolve(kblayoutsDir)
-  let resolved
-  try { resolved = realpathSync(absPath) } catch { resolved = resolve(absPath) }
-  const rel = relative(allowedDir, resolved)
-  if (rel.startsWith('..') || isAbsolute(rel)) {
-    throw new Error('Access denied: path outside allowed directory')
-  }
-  return absPath
+  const resolved = validateWithin(absPath, kblayoutsDir)
+  return resolved
 })
 
 // --- Theme/keyboard override IPC ---
@@ -320,6 +286,20 @@ ipcMain.on('setThemeOverride', (_e, arg) => { themeOverride = arg })
 ipcMain.on('setKbOverride', (_e, arg) => { kbOverride = arg })
 
 // --- Path validation ---
+function validateWithin(filePath, allowedDir) {
+  if (typeof filePath !== 'string' || filePath.includes('\0')) {
+    throw new Error('Invalid path')
+  }
+  const absPath = filePath
+  const allowed = resolve(allowedDir)
+  let resolved
+  try { resolved = realpathSync(absPath) } catch { resolved = resolve(absPath) }
+  const rel = relative(allowed, resolved)
+  if (rel.startsWith('..') || isAbsolute(rel) || rel === '') {
+    throw new Error('Access denied: path outside allowed directory')
+  }
+  return resolved
+}
 function validatePath(filePath) {
   if (typeof filePath !== 'string' || filePath.includes('\0')) {
     throw new Error('Invalid path')

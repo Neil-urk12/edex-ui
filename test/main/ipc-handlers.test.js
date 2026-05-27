@@ -545,7 +545,7 @@ describe('Security: Asset path handlers use realpathSync', () => {
       const handler = getHandler(channel)
       const result = handler({}, 'evil-link')
       expect(result).toBeTruthy()
-      expect(result).toContain('evil-link')
+      expect(result).toBe(filePath)  // resolved path still inside allowed dir
     })
 
     it(`${channel} falls back to resolve when file does not exist (ENOENT)`, async () => {
@@ -895,4 +895,176 @@ describe('Security: edex-audio protocol TOCTOU fix', () => {
       expect(() => handler({}, '/tmp/test-userdata/file.txt', 'data')).not.toThrow()
     })
   })
+})
+
+describe('Security: saveSettings key whitelist', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.resetModules()
+    mockExistsSync.mockReturnValue(true)
+    mockReadFileSync.mockReturnValue('{}')
+    mockReaddirSync.mockReturnValue([])
+    mockLstatSync.mockReturnValue({
+      isFile: () => true,
+      isDirectory: () => false,
+      isSymbolicLink: () => false,
+      size: 42,
+      mtime: new Date('2024-01-15T10:30:00Z'),
+    })
+    mockRealpathSync.mockImplementation(p => p)
+  })
+
+  it('allows updating safe settings like theme', async () => {
+    mockReadFileSync.mockReturnValue(JSON.stringify({ theme: 'tron', shell: 'bash' }))
+    await loadModule()
+    const handler = getHandler('saveSettings')
+    const result = handler({}, { theme: 'matrix' })
+    expect(result.theme).toBe('matrix')
+  })
+
+  it('strips shell from partial to prevent terminal injection', async () => {
+    mockReadFileSync.mockReturnValue(JSON.stringify({ theme: 'tron', shell: 'bash' }))
+    await loadModule()
+    const handler = getHandler('saveSettings')
+    const result = handler({}, { shell: '/bin/sh', shellArgs: '-c "rm -rf /"' })
+    expect(result.shell).toBe('bash')  // unchanged
+    expect(result.shellArgs).toBe('')  // unchanged (or default)
+  })
+
+  it('strips cwd from partial to prevent path injection', async () => {
+    mockReadFileSync.mockReturnValue(JSON.stringify({ theme: 'tron', cwd: '/tmp/test-userdata' }))
+    await loadModule()
+    const handler = getHandler('saveSettings')
+    const result = handler({}, { cwd: '/etc' })
+    expect(result.cwd).toBe('/tmp/test-userdata')  // unchanged
+  })
+
+  it('still allows all safe keys', async () => {
+    mockReadFileSync.mockReturnValue('{}')
+    await loadModule()
+    const handler = getHandler('saveSettings')
+    const safeUpdate = {
+      theme: 'matrix',
+      keyboard: 'fr-FR',
+      termFontSize: 18,
+      audio: false,
+      audioVolume: 0.5,
+      clockHours: 12,
+      pingAddr: '8.8.8.8',
+      port: 8080,
+      nointro: true,
+      hideDotfiles: true,
+      fsListView: true,
+    }
+    const result = handler({}, safeUpdate)
+    for (const [key, val] of Object.entries(safeUpdate)) {
+      expect(result[key]).toBe(val)
+    }
+  })
+
+  it('strips computed path keys (settingsDir, themesPath, etc.)', async () => {
+    mockReadFileSync.mockReturnValue('{}')
+    await loadModule()
+    const handler = getHandler('saveSettings')
+    const result = handler({}, {
+      settingsDir: '/evil/path',
+      themesPath: '/evil/themes',
+      kbLayoutPath: '/evil/keyboards',
+      settingsFile: '/evil/settings.json',
+      theme: 'matrix'
+    })
+    expect(result.settingsDir).toBeUndefined()
+    expect(result.themesPath).toBeUndefined()
+    expect(result.kbLayoutPath).toBeUndefined()
+    expect(result.settingsFile).toBeUndefined()
+    expect(result.theme).toBe('matrix')
+  })
+})
+
+describe('Path handlers return resolved path', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.resetModules()
+    mockExistsSync.mockReturnValue(true)
+    mockReadFileSync.mockReturnValue('{}')
+    mockReaddirSync.mockReturnValue([])
+    mockLstatSync.mockReturnValue({
+      isFile: () => true,
+      isDirectory: () => false,
+      isSymbolicLink: () => false,
+      size: 42,
+      mtime: new Date('2024-01-15T10:30:00Z'),
+    })
+    mockRealpathSync.mockImplementation(p => p)
+  })
+
+  it('getAudioPath returns resolved path (not original join)', async () => {
+    // Simulate a symlink: join() produces /tmp/.../audio/symlink.mp3
+    // but realpathSync resolves it to the real file
+    mockRealpathSync.mockReturnValue('/tmp/test-userdata/assets/audio/real-click.mp3')
+    await loadModule()
+    const handler = getHandler('getAudioPath')
+    const result = handler({}, 'symlink.mp3')
+    expect(result).toBe('/tmp/test-userdata/assets/audio/real-click.mp3')
+  })
+
+  it('getThemePath returns resolved path', async () => {
+    mockRealpathSync.mockReturnValue('/tmp/test-userdata/themes/resolved-tron')
+    await loadModule()
+    const handler = getHandler('getThemePath')
+    const result = handler({}, 'symlink-tron')
+    expect(result).toBe('/tmp/test-userdata/themes/resolved-tron')
+  })
+
+  it('getKeyboardPath returns resolved path', async () => {
+    mockRealpathSync.mockReturnValue('/tmp/test-userdata/keyboards/resolved-en-US')
+    await loadModule()
+    const handler = getHandler('getKeyboardPath')
+    const result = handler({}, 'symlink-en-US')
+    expect(result).toBe('/tmp/test-userdata/keyboards/resolved-en-US')
+  })
+})
+
+describe('validateWithin helper consolidation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.resetModules()
+    mockExistsSync.mockReturnValue(true)
+    mockReadFileSync.mockReturnValue('{}')
+    mockReaddirSync.mockReturnValue([])
+    mockLstatSync.mockReturnValue({
+      isFile: () => true,
+      isDirectory: () => false,
+      isSymbolicLink: () => false,
+      size: 42,
+      mtime: new Date('2024-01-15T10:30:00Z'),
+    })
+    mockRealpathSync.mockImplementation(p => p)
+  })
+
+  const handlers = [
+    { channel: 'getTheme', args: ['test'], baseDir: '/tmp/test-userdata/themes', suffix: '.json' },
+    { channel: 'getKeyboardLayout', args: ['test'], baseDir: '/tmp/test-userdata/keyboards', suffix: '' },
+    { channel: 'getAudioUrl', args: ['test.mp3'], baseDir: '/tmp/test-userdata/assets/audio', suffix: '' },
+    { channel: 'getAudioPath', args: ['test.mp3'], baseDir: '/tmp/test-userdata/assets/audio', suffix: '' },
+    { channel: 'getThemePath', args: ['test'], baseDir: '/tmp/test-userdata/themes', suffix: '' },
+    { channel: 'getKeyboardPath', args: ['test'], baseDir: '/tmp/test-userdata/keyboards', suffix: '' },
+  ]
+
+  for (const { channel, args, baseDir } of handlers) {
+    it(`${channel} blocks symlinks pointing outside allowed directory`, async () => {
+      mockRealpathSync.mockReturnValue('/etc/passwd')
+      await loadModule()
+      const handler = getHandler(channel)
+      expect(() => handler({}, ...args)).toThrow(/denied|outside|traversal/)
+    })
+
+    it(`${channel} allows paths inside allowed directory`, async () => {
+      mockRealpathSync.mockReturnValue(`${baseDir}/safe`)
+      mockReadFileSync.mockReturnValue('{"ok":true}')
+      await loadModule()
+      const handler = getHandler(channel)
+      expect(() => handler({}, ...args)).not.toThrow()
+    })
+  }
 })
