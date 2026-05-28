@@ -63,3 +63,36 @@ describe('filesystem.class.js import cleanup', () => {
     expect(firstLine).not.toMatch(/_delay/);
   });
 });
+
+describe('purifyCSS security', () => {
+  it('strips < to prevent HTML injection', async () => {
+    const { purifyCSS } = await import('../../src/renderer/utils.js');
+    const input = '<script>alert(1)</script>';
+    const result = purifyCSS(input);
+    expect(result).not.toContain('<');
+  });
+
+  it('preserves CSS syntax characters for injectCSS support', async () => {
+    const { purifyCSS } = await import('../../src/renderer/utils.js');
+    const input = 'body { color: red; } .foo { background: url(test) }';
+    const result = purifyCSS(input);
+    expect(result).toContain('{');
+    expect(result).toContain('}');
+    expect(result).toContain(';');
+  });
+
+  it('preserves valid CSS color values', async () => {
+    const { purifyCSS } = await import('../../src/renderer/utils.js');
+    expect(purifyCSS('#ff0000')).toBe('#ff0000');
+  });
+
+  it('preserves valid CSS rgb values', async () => {
+    const { purifyCSS } = await import('../../src/renderer/utils.js');
+    expect(purifyCSS('rgb(255, 0, 0)')).toBe('rgb(255, 0, 0)');
+  });
+
+  it('handles undefined input', async () => {
+    const { purifyCSS } = await import('../../src/renderer/utils.js');
+    expect(purifyCSS(undefined)).toBe('');
+  });
+});

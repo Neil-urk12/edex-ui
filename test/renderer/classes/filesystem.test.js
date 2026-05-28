@@ -240,3 +240,82 @@ describe('FilesystemDisplay - Access Denied feedback (Issue 6)', () => {
     expect(content).toContain('ACCESS DENIED');
   });
 });
+
+describe('FilesystemDisplay - no inline onclick handlers (security)', () => {
+  let FilesystemDisplay;
+  let mockElectronAPI;
+
+  beforeEach(async () => {
+    vi.useFakeTimers();
+
+    document.body.innerHTML = `
+      <section id="filesystem">
+        <h3 class="title"><p>FILESYSTEM</p><p id="fs_disp_title_dir"></p></h3>
+        <div id="fs_parent3"></div>
+      </section>
+    `;
+
+    window.theme = {
+      r: 0, g: 255, b: 255,
+      colors: { light_black: '#111' }
+    };
+    window.settings = {
+      hideDotfiles: false,
+      fsListView: false,
+      settingsDir: '/tmp/test-userdata',
+      cwd: '/tmp/test-userdata'
+    };
+    window.keyboard = { attach: vi.fn(), detach: vi.fn() };
+    window.term = [{ term: { focus: vi.fn() } }];
+    window.currentTerm = 0;
+    window.audioManager = { folder: { play: vi.fn() } };
+    window.writeFile = vi.fn();
+    window.Modal = MockModal;
+    window.performance = { navigation: { type: 0 } };
+
+    mockElectronAPI = {
+      readdir: vi.fn().mockResolvedValue([]),
+      stat: vi.fn(),
+      readFile: vi.fn(),
+      readFileBinary: vi.fn(),
+      getAppPath: vi.fn().mockResolvedValue('/tmp/test-userdata'),
+      getFsSize: vi.fn().mockResolvedValue([{ mount: '/', size: 1000000, used: 500000, use: 50 }]),
+      watchDirectory: vi.fn().mockResolvedValue(undefined),
+      onFsChanged: vi.fn().mockReturnValue(() => {}),
+      onCwdChanged: vi.fn().mockReturnValue(() => {}),
+    };
+    window.electronAPI = mockElectronAPI;
+
+    const mod = await import('../../../src/renderer/classes/filesystem.class.js');
+    FilesystemDisplay = mod.FilesystemDisplay;
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    document.body.innerHTML = '';
+    delete window.electronAPI;
+    delete window.theme;
+    delete window.settings;
+    delete window.keyboard;
+    delete window.term;
+    delete window.currentTerm;
+    delete window.audioManager;
+    delete window.writeFile;
+    delete window.Modal;
+  });
+
+  it('constructor does not set inline onclick on any child element', async () => {
+    const fsd = new FilesystemDisplay({ parentId: 'fs_parent3' });
+
+    // Check that the DOM created by constructor has no onclick attributes
+    const container = document.getElementById('fs_parent3');
+    const elementsWithOnclick = container.querySelectorAll('[onclick]');
+    expect(elementsWithOnclick.length).toBe(0);
+  });
+
+  it('constructor creates fs_disp_container for file entries', async () => {
+    const fsd = new FilesystemDisplay({ parentId: 'fs_parent3' });
+    const filesContainer = document.getElementById('fs_disp_container');
+    expect(filesContainer).toBeTruthy();
+  });
+});
