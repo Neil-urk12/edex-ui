@@ -198,72 +198,77 @@ class FilesystemDisplay {
 
             const settingsDir = window.settings.settingsDir || '';
 
-            await new Promise((resolve, reject) => {
-                if (!content || content.length === 0) { resolve(); return; }
-                content = content.filter(f => f && f.trim() !== '');
-
-                let completed = 0;
-                content.forEach(async (file, i) => {
-                    let fstat;
-                    try {
-                        fstat = await window.electronAPI.stat(pathJoin(tcwd, file));
-                    } catch (e) {
-                        if (!e.message || (!e.message.includes("EPERM") && !e.message.includes("EBUSY"))) {
-                            // ignore permission errors
+            if (!content) {
+                this.setFailedState();
+                this._reading = false;
+                return;
+            }
+            content = content.filter(f => f && f.trim() !== '');
+            if (content.length > 0) {
+                try {
+                    const entries = await Promise.all(content.map(async (file) => {
+                        let fstat;
+                        try {
+                            fstat = await window.electronAPI.stat(pathJoin(tcwd, file));
+                        } catch (e) {
+                            return null; // skip entry on stat failure
                         }
-                        completed++;
-                        if (completed === content.length) resolve();
-                        return;
+
+                        let e = {
+                            name: escapeHtml(file),
+                            path: pathResolve(tcwd, file),
+                            type: "other",
+                            category: "other",
+                            hidden: false
+                        };
+
+                        if (fstat != null) {
+                            e.lastAccessed = fstat.mtime ? new Date(fstat.mtime).getTime() : 0;
+
+                            if (fstat.isDirectory) {
+                                e.category = "dir";
+                                e.type = "dir";
+                            }
+                            if (e.category === "dir" && tcwd === settingsDir && file === "themes") e.type = "edex-themesDir";
+                            if (e.category === "dir" && tcwd === settingsDir && file === "keyboards") e.type = "edex-kblayoutsDir";
+
+                            if (fstat.isSymbolicLink) {
+                                e.category = "symlink";
+                                e.type = "symlink";
+                            }
+
+                            if (fstat.isFile) {
+                                e.category = "file";
+                                e.type = "file";
+                                e.size = fstat.size;
+                            }
+                        } else {
+                            e.type = "system";
+                            e.hidden = true;
+                        }
+
+                        const themesDir = window.settings.themesPath || '';
+                        const keyboardsDir = window.settings.kbLayoutPath || '';
+
+                        if (e.category === "file" && tcwd === themesDir && file.endsWith(".json")) e.type = "edex-theme";
+                        if (e.category === "file" && tcwd === keyboardsDir && file.endsWith(".json")) e.type = "edex-kblayout";
+                        if (e.category === "file" && tcwd === settingsDir && file === "settings.json") e.type = "edex-settings";
+                        if (e.category === "file" && tcwd === settingsDir && file === "shortcuts.json") e.type = "edex-shortcuts";
+
+                        if (file.startsWith(".")) e.hidden = true;
+
+                        return e;
+                    }));
+
+                    for (const entry of entries) {
+                        if (entry) this.cwd.push(entry);
                     }
-
-                    let e = {
-                        name: escapeHtml(file),
-                        path: pathResolve(tcwd, file),
-                        type: "other",
-                        category: "other",
-                        hidden: false
-                    };
-
-                    if (fstat != null) {
-                        e.lastAccessed = fstat.mtime ? new Date(fstat.mtime).getTime() : 0;
-
-                        if (fstat.isDirectory) {
-                            e.category = "dir";
-                            e.type = "dir";
-                        }
-                        if (e.category === "dir" && tcwd === settingsDir && file === "themes") e.type = "edex-themesDir";
-                        if (e.category === "dir" && tcwd === settingsDir && file === "keyboards") e.type = "edex-kblayoutsDir";
-
-                        if (fstat.isSymbolicLink) {
-                            e.category = "symlink";
-                            e.type = "symlink";
-                        }
-
-                        if (fstat.isFile) {
-                            e.category = "file";
-                            e.type = "file";
-                            e.size = fstat.size;
-                        }
-                    } else {
-                        e.type = "system";
-                        e.hidden = true;
-                    }
-
-                    const themesDir = window.settings.themesPath || '';
-                    const keyboardsDir = window.settings.kbLayoutPath || '';
-
-                    if (e.category === "file" && tcwd === themesDir && file.endsWith(".json")) e.type = "edex-theme";
-                    if (e.category === "file" && tcwd === keyboardsDir && file.endsWith(".json")) e.type = "edex-kblayout";
-                    if (e.category === "file" && tcwd === settingsDir && file === "settings.json") e.type = "edex-settings";
-                    if (e.category === "file" && tcwd === settingsDir && file === "shortcuts.json") e.type = "edex-shortcuts";
-
-                    if (file.startsWith(".")) e.hidden = true;
-
-                    this.cwd.push(e);
-                    completed++;
-                    if (completed === content.length) resolve();
-                });
-            }).catch(() => { this.setFailedState() });
+                } catch (e) {
+                    this.setFailedState();
+                    this._reading = false;
+                    return;
+                }
+            }
 
             if (this._disposed) { this._reading = false; return; }
 

@@ -601,3 +601,199 @@ describe('FilesystemDisplay - readFS never rejects (defensive .catch)', () => {
     expect(result).toBe(false);
   });
 });
+
+describe('FilesystemDisplay - readFS entry processing', () => {
+  let FilesystemDisplay;
+  let mockElectronAPI;
+
+  beforeEach(async () => {
+    vi.useFakeTimers();
+    document.body.innerHTML = `
+      <section id="filesystem">
+        <h3 class="title"><p>FILESYSTEM</p><p id="fs_disp_title_dir"></p></h3>
+        <div id="fs_parent6"></div>
+      </section>
+    `;
+    window.theme = { r: 0, g: 255, b: 255, colors: { light_black: '#111' } };
+    window.settings = { hideDotfiles: false, fsListView: false, settingsDir: '/tmp/test-userdata', cwd: '/tmp/test-userdata' };
+    window.keyboard = { attach: vi.fn(), detach: vi.fn() };
+    window.term = [{ term: { focus: vi.fn() } }];
+    window.currentTerm = 0;
+    window.audioManager = { folder: { play: vi.fn() } };
+    window.writeFile = vi.fn();
+    window.Modal = MockModal;
+    window.performance = { navigation: { type: 1 } }; // disable auto-index so tests control readFS timing
+    mockElectronAPI = {
+      readdir: vi.fn(),
+      stat: vi.fn(),
+      readFile: vi.fn(),
+      readFileBinary: vi.fn(),
+      getAppPath: vi.fn().mockResolvedValue('/tmp/test-userdata'),
+      getFsSize: vi.fn().mockResolvedValue([{ mount: '/', size: 1000000, used: 500000, use: 50 }]),
+      watchDirectory: vi.fn().mockResolvedValue(undefined),
+      onFsChanged: vi.fn().mockReturnValue(() => {}),
+      onCwdChanged: vi.fn().mockReturnValue(() => {}),
+      getBlockDevices: vi.fn().mockResolvedValue([]),
+    };
+    window.electronAPI = mockElectronAPI;
+    const mod = await import('../../../src/renderer/classes/filesystem.class.js');
+    FilesystemDisplay = mod.FilesystemDisplay;
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    document.body.innerHTML = '';
+    delete window.electronAPI;
+    delete window.theme;
+    delete window.settings;
+    delete window.keyboard;
+    delete window.term;
+    delete window.currentTerm;
+    delete window.audioManager;
+    delete window.writeFile;
+    delete window.Modal;
+  });
+
+  it('readFS processes all entries when some stat calls fail', async () => {
+    const entries = ['file1.txt', 'file2.txt', 'file3.txt', 'file4.txt'];
+    mockElectronAPI.readdir.mockResolvedValue(entries);
+    // Alternate: even indices succeed, odd indices fail
+    mockElectronAPI.stat.mockImplementation((filePath) => {
+      const name = filePath.split('/').pop();
+      const idx = entries.indexOf(name);
+      if (idx % 2 === 0) {
+        return Promise.resolve({ isFile: true, isDirectory: false, size: 100, mtime: Date.now() });
+      }
+      return Promise.reject(new Error('EPERM'));
+    });
+    const fsd = new FilesystemDisplay({ parentId: 'fs_parent6' });
+    await fsd.readFS('/tmp/test');
+    // Should have processed all 4 entries (2 files, 2 hidden system entries)
+    expect(fsd.cwd.length).toBe(4); // 2 successful entries + "Show disks" + "Go up" (EPERM skipped silently)
+    expect(fsd._reading).toBe(false);
+  });
+
+  it('readFS processes entries when stat calls have varying delays', async () => {
+    const entries = ['a.txt', 'b.txt', 'c.txt'];
+    mockElectronAPI.readdir.mockResolvedValue(entries);
+    // Each stat call resolves at different times
+    mockElectronAPI.stat.mockImplementation((filePath) => {
+      const name = filePath.split('/').pop();
+      const delay = name === 'a.txt' ? 300 : name === 'b.txt' ? 100 : 200;
+      return new Promise(resolve => {
+        setTimeout(() => {
+          resolve({ isFile: true, isDirectory: false, size: 100, mtime: Date.now() });
+        }, delay);
+      });
+    });
+    const fsd = new FilesystemDisplay({ parentId: 'fs_parent6' });
+    const readPromise = fsd.readFS('/tmp/test');
+    // Advance timers to resolve all stat calls
+    await vi.advanceTimersByTimeAsync(300);
+    await readPromise;
+    // All 3 entries should be processed
+    expect(fsd.cwd.length).toBe(5); // 3 entries + "Show disks" + "Go up"
+    expect(fsd._reading).toBe(false);
+  });
+
+  it('readFS handles empty directory', async () => {
+    mockElectronAPI.readdir.mockResolvedValue([]);
+    const fsd = new FilesystemDisplay({ parentId: 'fs_parent6' });
+    await fsd.readFS('/tmp/test');
+    expect(fsd.cwd.length).toBe(2); // 0 entries + "Show disks" + "Go up"
+    expect(fsd._reading).toBe(false);
+  });
+
+  it('readFS silently skips permission-denied entries', async () => {
+    mockElectronAPI.readdir.mockResolvedValue(['secret1', 'secret2', 'secret3']);
+    mockElectronAPI.stat.mockRejectedValue(new Error('EPERM'));
+    const fsd = new FilesystemDisplay({ parentId: 'fs_parent6' });
+    await fsd.readFS('/tmp/test');
+    // EPERM entries silently skipped — only nav entries remain
+    expect(fsd.cwd.length).toBe(2); // "Show disks" + "Go up"
+    expect(fsd._reading).toBe(false);
+  });
+});
+
+describe('FilesystemDisplay - readFS error resilience', () => {
+  let FilesystemDisplay;
+  let mockElectronAPI;
+
+  beforeEach(async () => {
+    vi.useFakeTimers();
+    document.body.innerHTML = `
+      <section id="filesystem">
+        <h3 class="title"><p>FILESYSTEM</p><p id="fs_disp_title_dir"></p></h3>
+        <div id="fs_parent7"></div>
+      </section>
+    `;
+    window.theme = { r: 0, g: 255, b: 255, colors: { light_black: '#111' } };
+    window.settings = { hideDotfiles: false, fsListView: false, settingsDir: '/tmp/test-userdata', cwd: '/tmp/test-userdata' };
+    window.keyboard = { attach: vi.fn(), detach: vi.fn() };
+    window.term = [{ term: { focus: vi.fn() } }];
+    window.currentTerm = 0;
+    window.audioManager = { folder: { play: vi.fn() } };
+    window.writeFile = vi.fn();
+    window.Modal = MockModal;
+    window.performance = { navigation: { type: 1 } };
+    mockElectronAPI = {
+      readdir: vi.fn(),
+      stat: vi.fn(),
+      readFile: vi.fn(),
+      readFileBinary: vi.fn(),
+      getAppPath: vi.fn().mockResolvedValue('/tmp/test-userdata'),
+      getFsSize: vi.fn().mockResolvedValue([{ mount: '/', size: 1000000, used: 500000, use: 50 }]),
+      watchDirectory: vi.fn().mockResolvedValue(undefined),
+      onFsChanged: vi.fn().mockReturnValue(() => {}),
+      onCwdChanged: vi.fn().mockReturnValue(() => {}),
+      getBlockDevices: vi.fn().mockResolvedValue([]),
+    };
+    window.electronAPI = mockElectronAPI;
+    const mod = await import('../../../src/renderer/classes/filesystem.class.js');
+    FilesystemDisplay = mod.FilesystemDisplay;
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    document.body.innerHTML = '';
+    delete window.electronAPI;
+    delete window.theme;
+    delete window.settings;
+    delete window.keyboard;
+    delete window.term;
+    delete window.currentTerm;
+    delete window.audioManager;
+    delete window.writeFile;
+    delete window.Modal;
+  });
+
+  it('readFS resets _reading when Promise.all rejects unexpectedly', async () => {
+    // Make escapeHtml throw to cause Promise.all to reject
+    mockElectronAPI.readdir.mockResolvedValue(['file.txt']);
+    mockElectronAPI.stat.mockResolvedValue({ isFile: true, isDirectory: false, size: 100, mtime: Date.now() });
+    const utils = await import('../../../src/renderer/utils.js');
+    const spy = vi.spyOn(utils, 'escapeHtml').mockImplementation(() => { throw new Error('unexpected'); });
+    const fsd = new FilesystemDisplay({ parentId: 'fs_parent7' });
+    await fsd.readFS('/tmp/test').catch(() => {});
+    expect(fsd._reading).toBe(false);
+    expect(fsd.failed).toBe(true);
+    spy.mockRestore();
+  });
+
+  it('readFS handles null readdir return gracefully', async () => {
+    mockElectronAPI.readdir.mockResolvedValue(null);
+    const fsd = new FilesystemDisplay({ parentId: 'fs_parent7' });
+    await fsd.readFS('/tmp/test');
+    expect(fsd.failed).toBe(true);
+    expect(fsd._reading).toBe(false);
+  });
+
+  it('readFS handles all-whitespace entries', async () => {
+    mockElectronAPI.readdir.mockResolvedValue(['   ', '', '  ']);
+    const fsd = new FilesystemDisplay({ parentId: 'fs_parent7' });
+    await fsd.readFS('/tmp/test');
+    // All filtered out — only nav entries remain
+    expect(fsd.cwd.length).toBe(2); // "Show disks" + "Go up"
+    expect(fsd._reading).toBe(false);
+  });
+});
