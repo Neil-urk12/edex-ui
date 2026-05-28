@@ -117,3 +117,46 @@ describe('Symlink escape protection', () => {
       .toThrow(/Path traversal|Access denied/);
   });
 });
+
+describe('validateAssetPath - guard clause coverage', () => {
+  let tmpDir;
+  let userData;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'edex-asset-guard-'));
+    userData = tmpDir;
+    mkdirSync(join(userData, 'assets'), { recursive: true });
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('rejects empty string', () => {
+    expect(() => validateAssetPath('', userData)).toThrow(/Invalid path/);
+  });
+
+  it('rejects whitespace-only string', () => {
+    expect(() => validateAssetPath('   ', userData)).toThrow(/Invalid path/);
+  });
+
+  it('rejects null byte in string', () => {
+    expect(() => validateAssetPath('file\0name', userData)).toThrow(/Invalid path/);
+  });
+
+  it('rejects non-string input null', () => {
+    expect(() => validateAssetPath(null, userData)).toThrow(/Invalid path/);
+  });
+
+  it('rejects non-string input undefined', () => {
+    expect(() => validateAssetPath(undefined, userData)).toThrow(/Invalid path/);
+  });
+
+  it('rejects non-string input number', () => {
+    expect(() => validateAssetPath(42, userData)).toThrow(/Invalid path/);
+  });
+
+  it('accepts valid asset path', () => {
+    expect(() => validateAssetPath('image.png', userData)).not.toThrow();
+  });
+});

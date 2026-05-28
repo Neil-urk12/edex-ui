@@ -71,8 +71,7 @@ export function validateWithin(filePath, allowedDir) {
  * Returns the resolved absolute path.
  */
 export function validateAssetPath(relativePath, userData) {
-  if (typeof relativePath !== 'string' || relativePath.includes('\0')) throw new Error('Invalid path')
-  if (!relativePath || relativePath.trim() === '') throw new Error('Invalid path: empty')
+  if (typeof relativePath !== 'string' || relativePath.includes('\0') || relativePath.trim() === '') throw new Error('Invalid path')
   const absPath = join(userData, 'assets', relativePath)
   const assetsDir = resolve(join(userData, 'assets'))
   let absResolved

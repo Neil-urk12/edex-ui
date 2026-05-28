@@ -397,12 +397,45 @@ describe('Security: openPath input validation', () => {
   it('openPath falls back to resolve when file does not exist (ENOENT)', async () => {
     const enoent = Object.assign(new Error('ENOENT'), { code: 'ENOENT' })
     mockRealpathSync.mockImplementation(() => { throw enoent })
+    mockLstatSync.mockReturnValue({
+      isFile: () => true,
+      isDirectory: () => false,
+      isSymbolicLink: () => false,
+      size: 42,
+      mtime: new Date(),
+    })
     await loadModule()
     const { shell } = await import('electron')
     const openPath = getHandler('openPath')
     shell.openPath.mockResolvedValue('')
     await openPath({}, '/tmp/test-userdata/new-file.txt')
     expect(shell.openPath).toHaveBeenCalled()
+  })
+
+  it('openPath handles lstatSync ENOENT gracefully (file deleted between list and open)', async () => {
+    const enoent = Object.assign(new Error('ENOENT'), { code: 'ENOENT' })
+    mockLstatSync.mockImplementation(() => { throw enoent })
+    await loadModule()
+    const { shell } = await import('electron')
+    const openPath = getHandler('openPath')
+    shell.openPath.mockResolvedValue('')
+    await openPath({}, '/tmp/test-userdata/deleted-file.txt')
+    expect(shell.openPath).toHaveBeenCalled()
+  })
+
+  it('openPath rejects directories to prevent opening userData in file manager', async () => {
+    mockLstatSync.mockReturnValue({
+      isFile: () => false,
+      isDirectory: () => true,
+      isSymbolicLink: () => false,
+      size: 0,
+      mtime: new Date(),
+    })
+    await loadModule()
+    const { shell } = await import('electron')
+    const openPath = getHandler('openPath')
+    expect(() => openPath({}, '/tmp/test-userdata')).toThrow(/directory|not a file/i)
+    expect(shell.openPath).not.toHaveBeenCalled()
   })
 })
 

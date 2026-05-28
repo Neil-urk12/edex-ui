@@ -200,6 +200,14 @@ ipcMain.handle('getClipboardText', () => clipboard.readText())
 ipcMain.handle('setClipboardText', (_event, text) => clipboard.writeText(text))
 ipcMain.handle('openPath', (_event, path) => {
   const resolved = validateWithin(path, userData)
+  try {
+    const stat = lstatSync(resolved)
+    if (stat.isDirectory()) {
+      throw new Error('Cannot open directory')
+    }
+  } catch (e) {
+    if (e.code !== 'ENOENT') throw e
+  }
   const ext = extname(resolved).toLowerCase()
   if (ext && !SAFE_OPEN_EXTENSIONS.includes(ext)) {
     throw new Error('File type not allowed')
