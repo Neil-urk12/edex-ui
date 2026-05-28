@@ -6,11 +6,11 @@ import { describe, it, expect } from 'vitest'
 // still index.js; these tests enforce expected behaviour.
 // ============================================================
 
-// Regex from index.js line 391 (FIXED: includes \t and \0)
+// Regex from index.js line 413 (FIXED: includes \t and \0)
 const METACHAR_REGEX = /[;&|`$(){}!<>~\\\'\"\n\r#\t\u0000]/
 
-// Dangerous-flag check from index.js line 394 (FIXED)
-const DANGEROUS_FLAG_REGEX = /^[-/][cC]$|^--command$/
+// Dangerous-flag check from index.js line 416 (FIXED)
+const DANGEROUS_FLAG_REGEX = /^-[a-zA-Z]*[cC]$|^\/[cC]$|^--command([= ]|$)/
 
 // Directory-based allowlist (mirrors index.js FIX 3)
 const TRUSTED_SHELL_DIRS = [
@@ -281,7 +281,7 @@ describe('Actual code DANGEROUS_FLAG_REGEX edge cases', () => {
     // The FIXED regex from index.js:
     // /^-[a-zA-Z]*[cC]$|^\/[cC]$|^--command$/
     // Rejects -c, -C, -ac, -aC, --command, /c. Allows --check, --config, abc, music.
-    const fixedRegex = /^-[a-zA-Z]*[cC]$|^\/[cC]$|^--command$/;
+    const fixedRegex = /^-[a-zA-Z]*[cC]$|^\/[cC]$|^--command([= ]|$)/;
 
     it('does NOT reject --check', () => {
         expect(fixedRegex.test('--check')).toBe(false);
@@ -333,6 +333,23 @@ describe('Actual code DANGEROUS_FLAG_REGEX edge cases', () => {
 
     it('rejects /C (Windows uppercase)', () => {
         expect(fixedRegex.test('/C')).toBe(true);
+    });
+});
+
+describe('--command prefix forms (defense-in-depth)', () => {
+    // Updated production regex — catches --command= and --command (but NOT --commander)
+    const fixedRegex = /^-[a-zA-Z]*[cC]$|^\/[cC]$|^--command([= ]|$)/;
+
+    it('rejects --command=evil (equals form)', () => {
+        expect(fixedRegex.test('--command=evil')).toBe(true);
+    });
+
+    it('rejects --command=anything (equals with any value)', () => {
+        expect(fixedRegex.test('--command=anything')).toBe(true);
+    });
+
+    it('does NOT reject --commander (different flag)', () => {
+        expect(fixedRegex.test('--commander')).toBe(false);
     });
 });
 

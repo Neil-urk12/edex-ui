@@ -145,4 +145,39 @@ describe('Asset hash refresh capability', () => {
         expect(hash2).toMatch(/^[a-f0-9]{64}$/);
     });
 });
+
+describe('Hash truncation in error messages', () => {
+    function truncateHash(hash) {
+        return hash.slice(0, 16);
+    }
+
+    it('truncates 64-char SHA-256 hash to 16 chars', () => {
+        const fullHash = createHash('sha256').update('test').digest('hex');
+        expect(fullHash).toHaveLength(64);
+        expect(truncateHash(fullHash)).toHaveLength(16);
+    });
+
+    it('truncated hash is prefix of full hash', () => {
+        const fullHash = createHash('sha256').update('test content').digest('hex');
+        const truncated = truncateHash(fullHash);
+        expect(fullHash.startsWith(truncated)).toBe(true);
+    });
+
+    it('different inputs produce different truncated hashes', () => {
+        const hash1 = truncateHash(createHash('sha256').update('content A').digest('hex'));
+        const hash2 = truncateHash(createHash('sha256').update('content B').digest('hex'));
+        expect(hash1).not.toBe(hash2);
+    });
+
+    it('error message with truncated hashes is concise', () => {
+        const expectedHash = createHash('sha256').update('original').digest('hex');
+        const actualHash = createHash('sha256').update('tampered').digest('hex');
+        const truncatedExpected = expectedHash.slice(0, 16);
+        const truncatedActual = actualHash.slice(0, 16);
+
+        const errorMessage = `Expected ${truncatedExpected}, got ${truncatedActual}`;
+        // With full hashes this would be ~140 chars; truncated should be ~52 chars
+        expect(errorMessage.length).toBeLessThan(100);
+    });
+});
 });

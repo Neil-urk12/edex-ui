@@ -241,7 +241,7 @@ ipcMain.handle('loadFileIcons', async (_event) => {
     throw new Error('Asset hash not available for misc/file-icons-match.js — file may have been added after startup. Restart the app to regenerate hashes.')
   }
   if (actualHash !== assetHashes['misc/file-icons-match.js']) {
-    throw new Error(`Asset integrity check failed: misc/file-icons-match.js has been tampered with. Expected ${assetHashes['misc/file-icons-match.js']}, got ${actualHash}`)
+    throw new Error(`Asset integrity check failed: misc/file-icons-match.js has been tampered with. Expected ${assetHashes['misc/file-icons-match.js'].slice(0, 16)}, got ${actualHash.slice(0, 16)}`)
   }
   const { createRequire } = await import('module')
   const req = createRequire(resolved)
@@ -413,7 +413,7 @@ ipcMain.handle('terminal:create', async (_event, options) => {
     if (typeof p !== 'string' || /[;&|`$(){}!<>~\\\'\"\n\r\#\t\u0000]/.test(p)) {
       throw new Error('Invalid shell parameter: contains forbidden characters');
     }
-    if (/^-[a-zA-Z]*[cC]$|^\/[cC]$|^--command$/.test(p)) {
+    if (/^-[a-zA-Z]*[cC]$|^\/[cC]$|^--command([= ]|$)/.test(p)) {
       throw new Error('Invalid shell parameter: -c flag not allowed');
     }
   }
