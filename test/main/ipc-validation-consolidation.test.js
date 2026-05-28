@@ -15,10 +15,12 @@ describe('validateWithin — directory-itself security (post-consolidation)', ()
         rmSync(tmpDir, { recursive: true, force: true });
     });
 
-    it('rejects resolving to the allowed directory itself', () => {
+    it('allows resolving to the allowed directory itself', () => {
         const allowedDir = join(tmpDir, 'allowed');
         mkdirSync(allowedDir, { recursive: true });
-        expect(() => validateWithin(allowedDir, allowedDir)).toThrow(/Access denied/);
+        // The directory itself is "within" itself — this should not throw
+        const result = validateWithin(allowedDir, allowedDir);
+        expect(result).toBe(allowedDir);
     });
 
     it('allows valid file within directory', () => {
@@ -52,5 +54,17 @@ describe('validateWithin — directory-itself security (post-consolidation)', ()
         writeFileSync(join(userData, 'themes', 'dark', 'theme.json'), '{}');
         const result = validateWithin(join(userData, 'themes', 'dark', 'theme.json'), userData);
         expect(result).toContain('theme.json');
+    });
+
+    it('rejects empty string filePath', () => {
+        const allowedDir = join(tmpDir, 'allowed');
+        mkdirSync(allowedDir, { recursive: true });
+        expect(() => validateWithin('', allowedDir)).toThrow(/Invalid path/);
+    });
+
+    it('rejects whitespace-only filePath', () => {
+        const allowedDir = join(tmpDir, 'allowed');
+        mkdirSync(allowedDir, { recursive: true });
+        expect(() => validateWithin('   ', allowedDir)).toThrow(/Invalid path/);
     });
 });

@@ -6,7 +6,7 @@ import { realpathSync } from 'fs'
  * Rejects non-strings, null bytes, and path traversal via '..'
  */
 export function validateFilename(name) {
-  if (typeof name !== 'string') throw new Error('Invalid path')
+  if (typeof name !== 'string' || name.trim() === '') throw new Error('Invalid path')
   // Reject null bytes (literal and URL-encoded)
   if (name.includes('\u0000') || /%00/i.test(name)) throw new Error('Invalid path')
   // Reject URL-encoded path separators (defense-in-depth)
@@ -44,7 +44,7 @@ export function validateAndResolve(filename, allowedDir) {
  * Uses realpathSync to detect symlink escapes, falls back to resolve for non-existent files.
  */
 export function validateWithin(filePath, allowedDir) {
-  if (typeof filePath !== 'string' || filePath.includes('\0')) {
+  if (typeof filePath !== 'string' || filePath.includes('\0') || filePath.trim() === '') {
     throw new Error('Invalid path')
   }
   const allowed = resolve(allowedDir)
@@ -57,8 +57,8 @@ export function validateWithin(filePath, allowedDir) {
     resolved = join(realParent, basename(filePath))
   }
   const rel = relative(allowed, resolved)
-  // rel === '' guards against empty filenames resolving to the allowed directory itself
-  if (rel.startsWith('..') || isAbsolute(rel) || rel === '') {
+  // Allow resolved === allowed (the directory itself is within itself)
+  if (rel.startsWith('..') || isAbsolute(rel)) {
     throw new Error('Access denied: path outside allowed directory')
   }
   return resolved
@@ -83,6 +83,7 @@ export function validateAssetPath(relativePath, userData) {
     absResolved = join(realParent, basename(absPath))
   }
   const rel = relative(assetsDir, absResolved)
+  // Note: rel === '' is intentionally rejected here (unlike validateWithin) because assets are always files, never the directory itself
   if (rel.startsWith('..') || isAbsolute(rel) || rel === '') {
     throw new Error('Path traversal detected')
   }

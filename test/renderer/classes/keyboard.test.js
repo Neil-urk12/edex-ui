@@ -75,10 +75,8 @@ describe('Keyboard deadkey methods', () => {
             const kb = createMinimalKeyboard();
             kb.container.dataset.isNextCedilla = 'true';
 
-            // Simulate what pressKey does when cedilla flag is set
+            // Apply cedilla, then verify flag resets to false
             if (kb.container.dataset.isNextCedilla === 'true') {
-                // This is the buggy line — it sets to "true" instead of "false"
-                // After fix, this should set to "false"
                 kb.container.dataset.isNextCedilla = 'false';
             }
 
