@@ -344,75 +344,6 @@ class FilesystemDisplay {
             blockList.forEach((e, blockIndex) => {
                 let hidden = e.hidden ? " hidden" : "";
 
-                let cmdPrefix = `if (window.keyboard.container.dataset.isCtrlOn == "true") {
-                                window.electronAPI.openPath(fsDisp.cwd[${blockIndex}].path);
-                            } else if (window.keyboard.container.dataset.isShiftOn == "true") {
-                                window.term[window.currentTerm].write("\\""+fsDisp.cwd[${blockIndex}].path+"\\"");
-                            } else {
-                          `.replace(/\n+ */g, '');
-
-                let cmdSuffix = `}`;
-
-                let cmd;
-
-                if (!this._noTracking) {
-                    if (e.type === "dir" || e.type.endsWith("Dir")) {
-                        cmd = `window.term[window.currentTerm].writelr("cd \\""+fsDisp.cwd[${blockIndex}].name+"\\"")`;
-                    } else if (e.type === "up") {
-                        cmd = `window.term[window.currentTerm].writelr("cd ..")`;
-                    } else if (e.type === "disk" || e.type === "rom" || e.type === "usb") {
-                        if (isWin) {
-                            cmd = `window.term[window.currentTerm].writelr("${e.path.replace(/\\/g, '')}")`;
-                        } else {
-                            cmd = `window.term[window.currentTerm].writelr("cd \\"${e.path.replace(/\\/g, '')}\\"")`;
-                        }
-                    } else {
-                        cmd = `window.term[window.currentTerm].write("\\""+fsDisp.cwd[${blockIndex}].path+"\\"")`;
-                    }
-                } else {
-                    if (e.type === "dir" || e.type.endsWith("Dir")) {
-                        cmd = `window.fsDisp.readFS(fsDisp.cwd[${blockIndex}].path)`;
-                    } else if (e.type === "up") {
-                        cmd = `window.fsDisp.readFS("${pathResolve(this.dirpath, "..")}")`;
-                    } else if (e.type === "disk" || e.type === "rom" || e.type === "usb") {
-                        cmd = `window.fsDisp.readFS("${e.path.replace(/\\/g, '')}")`;
-                    } else {
-                        cmd = `window.term[window.currentTerm].write("\\""+fsDisp.cwd[${blockIndex}].path+"\\"")`;
-                    }
-                }
-
-                if (e.type === "file") {
-                    cmd = `window.fsDisp.openFile(${blockIndex})`;
-                }
-
-                if (e.type === "system") {
-                    cmd = "";
-                }
-
-                if (e.type === "showDisks") {
-                    cmd = `window.fsDisp.readDevices()`;
-                    cmdPrefix = '';
-                    cmdSuffix = '';
-                }
-
-                if (e.type === "up") {
-                    cmdPrefix = '';
-                    cmdSuffix = '';
-                }
-
-                if (e.type === "edex-theme") {
-                    cmd = `window.themeChanger("${e.name.slice(0, -5)}")`;
-                }
-                if (e.type === "edex-kblayout") {
-                    cmd = `window.remakeKeyboard("${e.name.slice(0, -5)}")`;
-                }
-                if (e.type === "edex-settings") {
-                    cmd = `window.openSettings()`;
-                }
-                if (e.type === "edex-shortcuts") {
-                    cmd = `window.openShortcutsHelp()`;
-                }
-
                 let icon = "";
                 let type = "";
                 if (this.icons) {
@@ -493,11 +424,6 @@ class FilesystemDisplay {
                 if (type === "") type = e.type;
                 e.type = type;
 
-                if (e.type === 'video' || e.type === 'audio' || e.type === 'image') {
-                    this.cwd[blockIndex].type = e.type;
-                    cmd = `window.fsDisp.openMedia(${blockIndex})`;
-                }
-
                 if (typeof e.size === "number") {
                     e.size = this._formatBytes(e.size);
                 } else {
@@ -509,7 +435,7 @@ class FilesystemDisplay {
                     e.lastAccessed = "--";
                 }
 
-                filesDOM += `<div class="fs_disp_${e.type}${hidden} animationWait" onclick='${cmdPrefix+cmd+cmdSuffix}'>
+                filesDOM += `<div class="fs_disp_${e.type}${hidden} animationWait" data-block-index="${blockIndex}">
                                 <svg viewBox="0 0 ${icon.width} ${icon.height}" fill="${this.iconcolor}">
                                     ${icon.svg}
                                 </svg>
@@ -521,10 +447,16 @@ class FilesystemDisplay {
             });
             this.filesContainer.innerHTML = filesDOM;
 
-            if (this.filesContainer.getAttribute("class").endsWith("disks")) {
-                document.getElementById("fs_space_bar").setAttribute("onclick", "window.fsDisp.render(window.fsDisp.cwd)");
-            } else {
-                document.getElementById("fs_space_bar").setAttribute("onclick", "");
+            // Attach click handlers via event delegation (no inline onclick)
+            this._attachFileClickHandlers(blockList);
+
+            const spaceBar = document.getElementById("fs_space_bar");
+            if (spaceBar) {
+                if (this.filesContainer.getAttribute("class").endsWith("disks")) {
+                    spaceBar.onclick = () => window.fsDisp.render(window.fsDisp.cwd);
+                } else {
+                    spaceBar.onclick = null;
+                }
             }
 
             // Render animation
@@ -566,7 +498,7 @@ class FilesystemDisplay {
         };
 
         this.renderDiskUsage = async fsBlock => {
-            if (document.getElementById("fs_space_bar").getAttribute("onclick") !== "" || fsBlock === null) return;
+            if (document.getElementById("fs_space_bar").onclick || fsBlock === null) return;
 
             let splitter = (navigator.platform.includes('Win')) ? "\\" : "/";
             let displayMount = (fsBlock.mount.length < 18) ? fsBlock.mount : "..."+splitter+fsBlock.mount.split(splitter).pop();
@@ -575,7 +507,7 @@ class FilesystemDisplay {
                 this.space_bar.text.innerHTML = `Mount <strong>${displayMount}</strong> used <strong>${Math.round(fsBlock.use)}%</strong>`;
                 this.space_bar.bar.value = Math.round(fsBlock.use);
             } else if (!isNaN((fsBlock.size / fsBlock.used) * 100)) {
-                let usage = Math.round((fsBlock.size / fsBlock.used) * 100);
+                let usage = Math.round((fsBlock.used / fsBlock.size) * 100);
                 this.space_bar.text.innerHTML = `Mount <strong>${displayMount}</strong> used <strong>${usage}%</strong>`;
                 this.space_bar.bar.value = usage;
             } else {
@@ -816,6 +748,121 @@ class FilesystemDisplay {
             this.icons = null;
         }
     }
+
+    _attachFileClickHandlers(blockList) {
+        // Remove previous listener to prevent leaks
+        if (this._clickHandler) {
+            this._clickHandlerTarget.removeEventListener('click', this._clickHandler);
+        }
+
+        const container = document.getElementById('filesystem');
+        if (!container) return;
+
+        this._clickHandler = (event) => {
+            const fileEntry = event.target.closest('[data-block-index]');
+            if (!fileEntry) return;
+
+            const blockIndex = parseInt(fileEntry.dataset.blockIndex, 10);
+            const e = blockList[blockIndex];
+            if (!e) return;
+
+            const cwdEntry = this.cwd[blockIndex];
+            if (!cwdEntry) return;
+
+            const isWin = navigator.platform.includes('Win');
+
+            // Ctrl+click: open in OS default app
+            if (event.ctrlKey) {
+                window.electronAPI.openPath(cwdEntry.path);
+                return;
+            }
+
+            // Shift+click: insert path in terminal (no execute)
+            if (event.shiftKey) {
+                window.term[window.currentTerm].write('"' + cwdEntry.path + '"');
+                return;
+            }
+
+            // showDisks: read devices
+            if (e.type === 'showDisks') {
+                this.readDevices();
+                return;
+            }
+
+            // up: navigate to parent
+            if (e.type === 'up') {
+                if (this._noTracking) {
+                    this.readFS(pathResolve(this.dirpath, '..'));
+                } else {
+                    window.term[window.currentTerm].writelr('cd ..');
+                }
+                return;
+            }
+
+            // edex special types
+            if (e.type === 'edex-theme') {
+                window.themeChanger(e.name.slice(0, -5));
+                return;
+            }
+            if (e.type === 'edex-kblayout') {
+                window.remakeKeyboard(e.name.slice(0, -5));
+                return;
+            }
+            if (e.type === 'edex-settings') {
+                window.openSettings();
+                return;
+            }
+            if (e.type === 'edex-shortcuts') {
+                window.openShortcutsHelp();
+                return;
+            }
+
+            // system: no-op
+            if (e.type === 'system') return;
+
+            // disk/rom/usb
+            if (e.type === 'disk' || e.type === 'rom' || e.type === 'usb') {
+                if (this._noTracking) {
+                    this.readFS(cwdEntry.path);
+                } else {
+                    if (isWin) {
+                        window.term[window.currentTerm].writelr(cwdEntry.path);
+                    } else {
+                        window.term[window.currentTerm].writelr('cd "' + cwdEntry.path + '"');
+                    }
+                }
+                return;
+            }
+
+            // directory
+            if (e.type === 'dir' || e.type.endsWith('Dir')) {
+                if (this._noTracking) {
+                    this.readFS(cwdEntry.path);
+                } else {
+                    window.term[window.currentTerm].writelr('cd "' + cwdEntry.name + '"');
+                }
+                return;
+            }
+
+            // media (video/audio/image)
+            if (e.type === 'video' || e.type === 'audio' || e.type === 'image') {
+                this.cwd[blockIndex].type = e.type;
+                this.openMedia(blockIndex);
+                window.audioManager.folder.play();
+                return;
+            }
+
+            // file: open file viewer
+            if (e.type === 'file') {
+                this.openFile(blockIndex);
+                return;
+            }
+        };
+
+        this._clickHandlerTarget = container;
+        container.addEventListener('click', this._clickHandler);
+}
+
 }
 
 export { FilesystemDisplay };
