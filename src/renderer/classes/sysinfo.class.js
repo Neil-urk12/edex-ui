@@ -52,6 +52,8 @@ export class Sysinfo {
                 let h = Math.floor(uptime / 3600);
                 let m = Math.floor((uptime % 3600) / 60);
                 document.querySelector("#mod_sysinfo > div:nth-child(2) > h2").innerHTML = `${h}:${m}`;
+            }).catch(() => {
+                // Silently handle IPC failures — keep default display
             });
         } else {
             // Fallback: use performance API

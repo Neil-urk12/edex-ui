@@ -75,6 +75,9 @@ class RAMwatcher {
             document.getElementById("mod_ramwatcher_swaptext").innerText = `${usedSwapGiB} GiB`;
 
             this.currentlyUpdating = false;
+        }).catch(() => {
+            // Reset guard flag on error so polling can continue
+            this.currentlyUpdating = false;
         });
     }
     shuffleArray(array) {
