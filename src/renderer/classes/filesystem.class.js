@@ -668,7 +668,7 @@ class FilesystemDisplay {
                             title: "Failed to load file: " + block.path,
                             message: _escapeHtml(String(err))
                         });
-                        console.log(err);
+                        console.warn(err);
                         return;
                     }
                     window.keyboard.detach();
