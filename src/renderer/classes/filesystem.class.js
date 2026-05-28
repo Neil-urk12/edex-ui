@@ -1,4 +1,4 @@
-import { _escapeHtml, _encodePathURI, _delay } from '../utils.js';
+import { escapeHtml, encodePathURI, delay } from '../utils.js';
 
 // Path helpers (no require("path") in renderer)
 const pathJoin = (...parts) => parts.join('/').replace(/\/+/g, '/');
@@ -209,7 +209,7 @@ class FilesystemDisplay {
                     }
 
                     let e = {
-                        name: _escapeHtml(file),
+                        name: escapeHtml(file),
                         path: pathResolve(tcwd, file),
                         type: "other",
                         category: "other",
@@ -535,7 +535,7 @@ class FilesystemDisplay {
 
                 if (window.settings.hideDotfiles !== true || e.className.indexOf("hidden") === -1) {
                     window.audioManager.folder.play();
-                    await _delay(30);
+                    await delay(30);
                 }
 
                 id++;
@@ -640,7 +640,7 @@ class FilesystemDisplay {
                     const newModal = new Modal(
                         {
                             type: "custom",
-                            title: _escapeHtml(name),
+                            title: escapeHtml(name),
                             html: html
                         }
                     );
@@ -666,7 +666,7 @@ class FilesystemDisplay {
                         new Modal({
                             type: "info",
                             title: "Failed to load file: " + block.path,
-                            message: _escapeHtml(String(err))
+                            message: escapeHtml(String(err))
                         });
                         console.warn(err);
                         return;
@@ -675,8 +675,8 @@ class FilesystemDisplay {
                     new Modal(
                         {
                             type: "custom",
-                            title: _escapeHtml(name),
-                            html: `<textarea id="fileEdit" rows="40" cols="150" spellcheck="false">${_escapeHtml(data)}</textarea><p id="fedit-status"></p>`,
+                            title: escapeHtml(name),
+                            html: `<textarea id="fileEdit" rows="40" cols="150" spellcheck="false">${escapeHtml(data)}</textarea><p id="fedit-status"></p>`,
                             rawHtml: true,
                             buttons: [
                                 {label:"Save to Disk",action:{name:"writeFile",arg:block.path}}
@@ -702,13 +702,13 @@ class FilesystemDisplay {
 
             switch (type || block.type) {
                 case "image":
-                    html = `<img class="fsDisp_mediaDisp" src="${_encodePathURI(path || block.path)}" ondragstart="return false;">`;
+                    html = `<img class="fsDisp_mediaDisp" src="${encodePathURI(path || block.path)}" ondragstart="return false;">`;
                     break;
                 case "audio":
                     html = `<div>
                                 <div class="media_container" data-fullscreen="false">
                                     <audio class="media fsDisp_mediaDisp" preload="auto">
-                                        <source src="${_encodePathURI(path || block.path)}">
+                                        <source src="${encodePathURI(path || block.path)}">
                                         Unsupported audio format!
                                     </audio>
                                     <div class="media_controls" data-state="hidden">
@@ -740,7 +740,7 @@ class FilesystemDisplay {
                     html = `<div>
                                 <div class="media_container" data-fullscreen="false">
                                     <video class="media fsDisp_mediaDisp" preload="auto">
-                                        <source src="${_encodePathURI(path || block.path)}">
+                                        <source src="${encodePathURI(path || block.path)}">
                                         Unsupported video format!
                                     </video>
                                     <div class="media_controls" data-state="hidden">
@@ -779,7 +779,7 @@ class FilesystemDisplay {
 
             const newModal = new Modal({
                 type: "custom",
-                title: _escapeHtml(name),
+                title: escapeHtml(name),
                 html,
                 rawHtml: true,
             });
