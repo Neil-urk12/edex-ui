@@ -2,7 +2,7 @@ import deadkeysData from "./deadkeys.json";
 
 export class Keyboard {
     constructor(opts) {
-        if (!opts.layout || !opts.container) throw "Missing options";
+        if (!opts.layout || !opts.container) throw new Error("Missing options");
 
         // Layout data must be pre-loaded and passed in (async fetch before construction)
         const layout = opts.layout;

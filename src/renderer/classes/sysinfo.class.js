@@ -1,7 +1,7 @@
 // eDEX-UI Sysinfo Module (ported to ES module - uses IPC for system info)
 export class Sysinfo {
     constructor(parentId) {
-        if (!parentId) throw "Missing parameters";
+        if (!parentId) throw new Error("Missing parameters");
 
         const os = navigator.platform.includes('Mac') ? 'macOS' :
                    navigator.platform.includes('Win') ? 'Windows' :

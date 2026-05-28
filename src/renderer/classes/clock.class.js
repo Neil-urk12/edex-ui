@@ -1,7 +1,7 @@
 // eDEX-UI Clock Module (ported to ES module)
 export class Clock {
     constructor(parentId) {
-        if (!parentId) throw "Missing parameters";
+        if (!parentId) throw new Error("Missing parameters");
 
         this.twelveHours = (window.settings.clockHours === 12);
 

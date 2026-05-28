@@ -48,13 +48,10 @@ window.onerror = (msg, path, line, col, error) => {
 // ============================================================
 // Load config
 // ============================================================
-console.log('[BOOT] Loading settings...');
 window.settings = await window.electronAPI.getSettings();
-console.log('[BOOT] Settings loaded:', JSON.stringify(window.settings).slice(0, 200));
 window.shortcuts = window.settings.shortcuts || [];
 
 // Retrieve theme override (hotswitch)
-console.log('[BOOT] Loading theme override...');
 const themeOverride = await window.electronAPI.getThemeOverride();
 if (themeOverride !== null) {
     window.settings.theme = themeOverride;
@@ -62,7 +59,6 @@ if (themeOverride !== null) {
 }
 
 // Retrieve keyboard override (hotswitch)
-console.log('[BOOT] Loading keyboard override...');
 const kbOverride = await window.electronAPI.getKbOverride();
 if (kbOverride !== null) {
     window.settings.keyboard = kbOverride;
@@ -137,13 +133,10 @@ window._loadTheme = async (theme) => {
 };
 
 // Load theme JSON via electronAPI
-console.log('[BOOT] Loading theme:', window.settings.theme);
 const themeName = window.settings.theme;
 try {
     const themeData = await window.electronAPI.getTheme(themeName);
-    console.log('[BOOT] Theme loaded, applying...');
     await window._loadTheme(themeData);
-    console.log('[BOOT] Theme applied.');
 } catch (e) {
     console.error('[BOOT] Theme loading failed:', e);
     // Fallback theme so UI doesn't crash
@@ -153,10 +146,8 @@ try {
 // ============================================================
 // Audio
 // ============================================================
-console.log('[BOOT] Initializing audio...');
 try {
     window.audioManager = await createAudioManager();
-    console.log('[BOOT] Audio initialized.');
 } catch (e) {
     console.error('[BOOT] Audio init failed:', e);
 }
@@ -204,7 +195,6 @@ function waitForFonts() {
 // ============================================================
 let bootLogLines = [];
 let i = 0;
-console.log('[BOOT] Boot sequence starting...');
 
 // Load boot log text
 try {
@@ -216,21 +206,17 @@ try {
 
 let appVersion = await window.electronAPI.getAppVersion();
 
-console.log('[BOOT] nointro:', window.settings.nointro, 'nointroOverride:', window.settings.nointroOverride);
 if (window.settings.nointro || window.settings.nointroOverride) {
-    console.log('[BOOT] Skipping intro, calling initUI...');
     initGraphicalErrorHandling();
     document.getElementById("boot_screen").remove();
     document.body.setAttribute("class", "");
-    waitForFonts().then(() => { console.log('[BOOT] Fonts loaded, calling initUI...'); initUI(); });
+    waitForFonts().then(() => { initUI(); });
 } else {
-    console.log('[BOOT] Starting boot animation...');
     displayLine();
 }
 
 // Startup boot log
 function displayLine() {
-    console.log('[BOOT] displayLine() i=', i, 'bootLogLines.length=', bootLogLines.length);
     let bootScreen = document.getElementById("boot_screen");
 
     if (typeof bootLogLines[i] === "undefined") {
@@ -343,7 +329,6 @@ async function getDisplayName() {
 // Main UI initialization
 // ============================================================
 async function initUI() {
-    console.log('[BOOT] initUI() starting...');
     document.body.innerHTML += `<section class="mod_column" id="mod_column_left">
         <h3 class="title"><p>PANEL</p><p>SYSTEM</p></h3>
     </section>
@@ -936,8 +921,7 @@ window.useAppShortcut = action => {
             window.keyboard.togglePasswordMode();
             return true;
         case "DEV_DEBUG":
-            // Dev tools toggle via IPC
-            window.electronAPI.registerShortcut && console.log("DEV_DEBUG: toggle devtools via main process");
+            // Dev tools toggle via main process
             return true;
         case "DEV_RELOAD":
             window.location.reload(true);

@@ -6,7 +6,7 @@ import Color from 'color';
 
 class Terminal {
     constructor(opts) {
-        if (!opts.parentId || opts.id === undefined) throw "Missing options";
+        if (!opts.parentId || opts.id === undefined) throw new Error("Missing options");
 
         this.id = opts.id;
         this.cwd = "";

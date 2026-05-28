@@ -16,7 +16,7 @@ const pathResolve = (base, rel) => {
 
 class FilesystemDisplay {
     constructor(opts) {
-        if (!opts.parentId) throw "Missing options";
+        if (!opts.parentId) throw new Error("Missing options");
 
         this.cwd = [];
         this.cwd_path = null;
