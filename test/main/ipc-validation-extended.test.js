@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, mkdirSync, symlinkSync, writeFileSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { validateFilename, validateAndResolve, validateWithin, validatePath, validateAssetPath } from '../../src/main/ipc-validation.js';
+import { validateFilename, validateAndResolve, validateWithin, validateAssetPath } from '../../src/main/ipc-validation.js';
 
 describe('validateFilename - encoded traversal rejection', () => {
   it('rejects URL-encoded .. (%2e%2e)', () => {
@@ -81,7 +81,7 @@ describe('Symlink escape protection', () => {
       .toThrow(/Access denied|outside allowed/);
   });
 
-  it('validatePath: rejects symlink that escapes userData', () => {
+  it('validateWithin: rejects symlink that escapes userData', () => {
     const userData = join(tmpDir, 'userData');
     mkdirSync(userData, { recursive: true });
 
@@ -90,7 +90,7 @@ describe('Symlink escape protection', () => {
 
     symlinkSync(outsideDir, join(userData, 'link'));
 
-    expect(() => validatePath(join(userData, 'link', 'file.txt'), userData))
+    expect(() => validateWithin(join(userData, 'link', 'file.txt'), userData))
       .toThrow(/Access denied|outside allowed/);
   });
 

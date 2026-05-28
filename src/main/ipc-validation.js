@@ -1,4 +1,4 @@
-import { join, resolve, relative, isAbsolute, sep, dirname, basename } from 'path'
+import { join, resolve, relative, isAbsolute, dirname, basename } from 'path'
 import { realpathSync } from 'fs'
 
 /**
@@ -64,28 +64,6 @@ export function validateWithin(filePath, allowedDir) {
   return resolved
 }
 
-/**
- * Validate a path is within userData (used by openPath, readFile, writeFile, etc.)
- */
-export function validatePath(filePath, userData) {
-  if (typeof filePath !== 'string' || filePath.includes('\0')) {
-    throw new Error('Invalid path')
-  }
-  let resolved
-  try {
-    resolved = realpathSync(filePath)
-  } catch {
-    const parent = dirname(filePath)
-    let realParent
-    try { realParent = realpathSync(parent) } catch { realParent = resolve(parent) }
-    resolved = join(realParent, basename(filePath))
-  }
-  const allowedBase = resolve(userData)
-  if (resolved === allowedBase || resolved.startsWith(allowedBase + sep)) {
-    return resolved
-  }
-  throw new Error('Access denied: path outside allowed directory')
-}
 
 /**
  * Validate and resolve an asset-relative path within userData/assets.

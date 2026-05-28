@@ -388,7 +388,7 @@ describe('Security: openPath input validation', () => {
     expect(shell.openPath).toHaveBeenCalled()
   })
 
-  it('openPath still rejects unsafe extensions after validatePath passes', async () => {
+  it('openPath still rejects unsafe extensions after validateWithin passes', async () => {
     await loadModule()
     const openPath = getHandler('openPath')
     expect(() => openPath({}, '/tmp/test-userdata/malware.exe')).toThrow(/not allowed/)
@@ -1272,7 +1272,7 @@ describe('Security: terminal:create shell validation', () => {
     await loadModule()
     const handler = getHandler('terminal:create')
     // Should not throw for a path inside userData
-    await expect(handler({}, { cwd: '/tmp/test-userdata' })).resolves.toBeDefined()
+    await expect(handler({}, { cwd: '/tmp/test-userdata/subdir' })).resolves.toBeDefined()
   })
 })
 describe('Path handlers return resolved path', () => {

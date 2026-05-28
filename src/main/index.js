@@ -7,7 +7,7 @@ import which from 'which'
 import shellEnv from 'shell-env'
 import si from 'systeminformation'
 import { TerminalSession } from './terminal.js'
-import { validateFilename, validateAndResolve, validateWithin, validatePath, validateAssetPath } from './ipc-validation.js'
+import { validateFilename, validateAndResolve, validateWithin, validateAssetPath } from './ipc-validation.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -199,7 +199,7 @@ ipcMain.handle('getDisplays', () => screen.getAllDisplays().map(d => ({ id: d.id
 ipcMain.handle('getClipboardText', () => clipboard.readText())
 ipcMain.handle('setClipboardText', (_event, text) => clipboard.writeText(text))
 ipcMain.handle('openPath', (_event, path) => {
-  const resolved = validatePath(path, userData)
+  const resolved = validateWithin(path, userData)
   const ext = extname(resolved).toLowerCase()
   if (ext && !SAFE_OPEN_EXTENSIONS.includes(ext)) {
     throw new Error('File type not allowed')
@@ -248,7 +248,7 @@ ipcMain.handle('loadFileIcons', async (_event) => {
   return req(resolved)
 })
 ipcMain.handle('readFileBinary', (_event, filePath) => {
-  const resolved = validatePath(filePath, userData)
+  const resolved = validateWithin(filePath, userData)
   return readFileSync(resolved).toString('base64')
 })
 ipcMain.handle('getTheme', (_event, name) => {
@@ -284,7 +284,7 @@ ipcMain.on('setKbOverride', (_e, arg) => { kbOverride = arg })
 // --- Path validation --- (moved to ipc-validation.js)
 
 // --- Filesystem IPC ---
-// readdir and stat are intentionally unrestricted (no validatePath) to support
+// readdir and stat are intentionally unrestricted (no validateWithin) to support
 // the built-in filesystem browser which navigates arbitrary paths. Only null-byte
 // injection is blocked. readFile/writeFile remain restricted to userData.
 ipcMain.handle('readdir', (_event, dirPath) => {
@@ -319,18 +319,18 @@ ipcMain.handle('stat', (_event, filePath) => {
 })
 
 ipcMain.handle('readFile', (_event, filePath, encoding) => {
-  const resolved = validatePath(filePath, userData)
+  const resolved = validateWithin(filePath, userData)
   return readFileSync(resolved, encoding || 'utf-8')
 })
 
 ipcMain.handle('writeFile', (_event, filePath, content) => {
-  const resolved = validatePath(filePath, userData)
+  const resolved = validateWithin(filePath, userData)
   writeFileSync(resolved, content)
 })
 
 let fsWatchers = {}
 ipcMain.handle('watchDirectory', async (_event, dirPath) => {
-  const resolved = validatePath(dirPath, userData)
+  const resolved = validateWithin(dirPath, userData)
   if (fsWatchers[resolved]) return
   try {
     const watcher = watch(resolved, () => {
@@ -423,7 +423,7 @@ ipcMain.handle('terminal:create', async (_event, options) => {
     id,
     shell,
     params,
-    cwd: options.cwd ? validatePath(options.cwd, userData) : settings.cwd,
+    cwd: options.cwd ? validateWithin(options.cwd, userData) : settings.cwd,
     env: cleanEnv,
     ondata: (_id, data) => {
       if (mainWindow && !mainWindow.isDestroyed()) {
