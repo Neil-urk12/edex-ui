@@ -577,6 +577,7 @@ window.openSettings = async () => {
     new Modal({
         type: "custom",
         title: `Settings <i>(v${appVersion})</i>`,
+        rawHtml: true,
         html: `<table id="settingsEditor">
                     <tr>
                         <th>Key</th>
@@ -727,8 +728,8 @@ window.openSettings = async () => {
                 <h6 id="settingsEditorStatus">Loaded values from memory</h6>
                 <br>`,
         buttons: [
-            { label: "Save to Disk", action: "window.writeSettingsFile()" },
-            { label: "Reload UI", action: "window.location.reload(true);" }
+            { label: "Save to Disk", action: "writeSettings" },
+            { label: "Reload UI", action: "reload" }
         ]
     }, () => {
         // Link the keyboard back to the terminal
@@ -833,6 +834,7 @@ window.openShortcutsHelp = () => {
     new Modal({
         type: "custom",
         title: `Available Keyboard Shortcuts <i>(v${appVersion})</i>`,
+        rawHtml: true,
         html: `<h5>Using either the on-screen or a physical keyboard, you can use the following shortcuts:</h5>
                 <details open id="shortcutsHelpAccordeon1">
                     <summary>Emulator shortcuts</summary>
@@ -859,7 +861,7 @@ window.openShortcutsHelp = () => {
                 </details>
                 <br>`,
         buttons: [
-            { label: "Reload UI", action: "window.location.reload(true);" }
+            { label: "Reload UI", action: "reload" }
         ]
     }, () => {
         window.keyboard.attach();

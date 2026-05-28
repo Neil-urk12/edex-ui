@@ -31,35 +31,35 @@ export class Modal {
             case "error":
                 this.classes += " error";
                 zindex = 1500;
-                buttons.push({label:"PANIC", action:"window.modals['"+this.id+"'].close();"}, {label:"RELOAD", action:"window.location.reload(true);"});
+                buttons.push({label:"PANIC", action:"close"}, {label:"RELOAD", action:"reload"});
                 augs.push("tr-clip", "bl-rect", "r-clip");
                 break;
             case "warning":
                 this.classes += " warning";
                 zindex = 1000;
-                buttons.push({label:"OK", action:"window.modals['"+this.id+"'].close();"});
+                buttons.push({label:"OK", action:"close"});
                 augs.push("bl-clip", "tr-clip", "r-rect", "b-rect");
                 break;
             case "custom":
                 this.classes += " info custom";
                 zindex = 500;
                 buttons = options.buttons || [];
-                buttons.push({label:"Close", action:"window.modals['"+this.id+"'].close();"});
+                buttons.push({label:"Close", action:"close"});
                 augs.push("tr-clip", "bl-clip");
                 break;
             default:
                 this.classes += " info";
                 zindex = 500;
-                buttons.push({label:"OK", action:"window.modals['"+this.id+"'].close();"});
+                buttons.push({label:"OK", action:"close"});
                 augs.push("tr-clip", "bl-clip");
                 break;
         }
 
         const titleId = `modal_title_${this.id}`;
-        // options.html is rendered without escaping — caller must sanitize
+        // options.html is escaped by default; pass { rawHtml: true } to skip escaping
         let DOMstring = `<div id="modal_${this.id}" class="${this.classes}" style="z-index:${zindex+Object.keys(window.modals).length};" augmented-ui="${augs.join(" ")} exe" role="dialog" aria-modal="true" aria-labelledby="${titleId}">
             <h1 id="${titleId}">${_esc(this.title)}</h1>
-            ${this.type === "custom" ? options.html : "<h5>"+_esc(this.message)+"</h5>"}
+            ${this.type === "custom" ? (options.rawHtml ? options.html : _esc(options.html)) : "<h5>"+_esc(this.message)+"</h5>"}
             <div>`;
             const buttonActions = [];
             buttons.forEach((b, i) => {
@@ -120,11 +120,24 @@ export class Modal {
         element.addEventListener("mousedown", this._mousedownHandler);
         element.addEventListener("touchstart", this._touchstartHandler);
 
-        // Bind button actions via addEventListener (safe against XSS in onclick attributes)
+        // Bind button actions via addEventListener using action map
+        const actionMap = {
+            close: () => this.close(),
+            reload: () => window.location.reload(),
+            writeFile: (path) => { if (typeof window.writeFile === 'function') window.writeFile(path); },
+            writeSettings: () => { if (typeof window.writeSettingsFile === 'function') window.writeSettingsFile(); },
+        };
         element.querySelectorAll('button[data-action-idx]').forEach(btn => {
             const idx = parseInt(btn.dataset.actionIdx);
             if (buttonActions[idx]) {
-                btn.addEventListener('click', () => { new Function(buttonActions[idx])(); });
+                const action = buttonActions[idx];
+                if (typeof action === 'object' && action.name && actionMap[action.name]) {
+                    btn.addEventListener('click', () => { actionMap[action.name](action.arg); });
+                } else if (typeof action === 'string' && actionMap[action]) {
+                    btn.addEventListener('click', () => { actionMap[action](); });
+                } else {
+                    console.warn('Modal: unknown button action:', action);
+                }
             }
         });
 

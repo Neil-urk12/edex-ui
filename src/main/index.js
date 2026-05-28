@@ -238,10 +238,10 @@ ipcMain.handle('loadFileIcons', async (_event) => {
   const content = readFileSync(resolved, 'utf-8')
   const actualHash = createHash('sha256').update(content).digest('hex')
   if (!assetHashes['misc/file-icons-match.js']) {
-    throw new Error('Asset hash not available — file may have been added after startup')
+    throw new Error('Asset hash not available for misc/file-icons-match.js — file may have been added after startup. Restart the app to regenerate hashes.')
   }
   if (actualHash !== assetHashes['misc/file-icons-match.js']) {
-    throw new Error('Asset integrity check failed: file-icons-match.js has been tampered with')
+    throw new Error(`Asset integrity check failed: misc/file-icons-match.js has been tampered with. Expected ${assetHashes['misc/file-icons-match.js']}, got ${actualHash}`)
   }
   const { createRequire } = await import('module')
   const req = createRequire(resolved)
@@ -384,11 +384,13 @@ ipcMain.handle('terminal:create', async (_event, options) => {
     '/snap/bin/',
   ]
   const TRUSTED_WINDOWS_SHELLS = ['powershell.exe', 'cmd.exe', 'pwsh.exe']
+  const ALLOWED_SHELL_NAMES = ['bash', 'sh', 'zsh', 'fish', 'powershell.exe', 'cmd.exe', 'pwsh.exe']
 
   function isShellAllowed(resolvedPath) {
     const base = basename(resolvedPath).toLowerCase()
     if (TRUSTED_WINDOWS_SHELLS.includes(base)) return true
-    return TRUSTED_SHELL_DIRS.some(dir => resolvedPath.startsWith(dir))
+    if (!TRUSTED_SHELL_DIRS.some(dir => resolvedPath.startsWith(dir))) return false
+    return ALLOWED_SHELL_NAMES.includes(base)
   }
 
   const requestedShell = options.shell || settings.shell;
@@ -411,7 +413,7 @@ ipcMain.handle('terminal:create', async (_event, options) => {
     if (typeof p !== 'string' || /[;&|`$(){}!<>~\\\'\"\n\r\#\t\u0000]/.test(p)) {
       throw new Error('Invalid shell parameter: contains forbidden characters');
     }
-    if (/^(?!-)-?[a-zA-Z]*[cC]|^[-/]c$|^--command/.test(p)) {
+    if (/^-[a-zA-Z]*[cC]$|^\/[cC]$|^--command$/.test(p)) {
       throw new Error('Invalid shell parameter: -c flag not allowed');
     }
   }

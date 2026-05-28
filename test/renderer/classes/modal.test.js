@@ -123,9 +123,10 @@ describe('Modal', () => {
     });
 
     describe('custom type rendering', () => {
-        it('renders options.html instead of message', () => {
+        it('renders options.html instead of message (with rawHtml)', () => {
             new Modal({
                 type: 'custom',
+                rawHtml: true,
                 html: '<div id="custom-content">Hello Custom</div>'
             });
             const customContent = document.getElementById('custom-content');
@@ -788,6 +789,67 @@ describe('Modal', () => {
             expect(html).not.toContain('" onfocus="');
             expect(html).toContain('&quot; onfocus=');
         });
+    });
+});
+
+describe('Button actions use action map instead of new Function', () => {
+    it('error modal PANIC button closes modal without eval', () => {
+        const modal = new Modal({ type: 'error' });
+        const el = document.getElementById('modal_' + modal.id);
+        const panicBtn = Array.from(el.querySelectorAll('button')).find(b => b.textContent === 'PANIC');
+        expect(panicBtn).toBeTruthy();
+        panicBtn.click();
+        expect(el.className).toContain('blink');
+    });
+
+    it('custom modal button closes modal via action map', () => {
+        const modal = new Modal({
+            type: 'custom',
+            html: '<p>test</p>',
+            buttons: [{ label: 'Do Thing', action: "close" }]
+        });
+        const el = document.getElementById('modal_' + modal.id);
+        const btn = Array.from(el.querySelectorAll('button')).find(b => b.textContent === 'Do Thing');
+        expect(btn).toBeTruthy();
+        btn.click();
+        expect(el.className).toContain('blink');
+    });
+
+    it('uses action map keys, not code strings', () => {
+        // Verify that built-in buttons use named actions
+        const modal = new Modal({ type: 'error' });
+        const el = document.getElementById('modal_' + modal.id);
+        const buttons = Array.from(el.querySelectorAll('button'));
+        // PANIC and RELOAD buttons should exist and work via action map
+        const panicBtn = buttons.find(b => b.textContent === 'PANIC');
+        const reloadBtn = buttons.find(b => b.textContent === 'RELOAD');
+        expect(panicBtn).toBeTruthy();
+        expect(reloadBtn).toBeTruthy();
+        // PANIC should close via action map
+        panicBtn.click();
+        expect(el.className).toContain('blink');
+});
+
+describe('Custom modal HTML sanitization', () => {
+    it('escapes HTML tags in options.html to prevent XSS', () => {
+        const modal = new Modal({
+            type: 'custom',
+            html: '<img src=x onerror="window.xssTriggered=true">'
+        });
+        const el = document.getElementById('modal_' + modal.id);
+        // After fix, raw HTML should be escaped. Currently rendered raw — test should FAIL.
+        expect(el.innerHTML).not.toContain('<img');
+        expect(el.innerHTML).toContain('&lt;img');
+    });
+
+    it('allows safe HTML in options.html when rawHtml is true', () => {
+        const modal = new Modal({
+            type: 'custom',
+            html: '<p class="safe">Hello</p>',
+            rawHtml: true
+        });
+        const el = document.getElementById('modal_' + modal.id);
+        expect(el.querySelector('p.safe')).toBeTruthy();
     });
 });
 });

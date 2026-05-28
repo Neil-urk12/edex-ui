@@ -666,7 +666,7 @@ class FilesystemDisplay {
                         new Modal({
                             type: "info",
                             title: "Failed to load file: " + block.path,
-                            html: _escapeHtml(String(err))
+                            message: _escapeHtml(String(err))
                         });
                         console.log(err);
                         return;
@@ -677,8 +677,9 @@ class FilesystemDisplay {
                             type: "custom",
                             title: _escapeHtml(name),
                             html: `<textarea id="fileEdit" rows="40" cols="150" spellcheck="false">${_escapeHtml(data)}</textarea><p id="fedit-status"></p>`,
+                            rawHtml: true,
                             buttons: [
-                                {label:"Save to Disk",action:`window.writeFile('${block.path}')`}
+                                {label:"Save to Disk",action:{name:"writeFile",arg:block.path}}
                             ]
                         }, () => {
                             window.keyboard.attach();
@@ -779,7 +780,8 @@ class FilesystemDisplay {
             const newModal = new Modal({
                 type: "custom",
                 title: _escapeHtml(name),
-                html
+                html,
+                rawHtml: true,
             });
             if (block.type === "audio" || block.type === "video") {
                 if (typeof MediaPlayer !== 'undefined') {

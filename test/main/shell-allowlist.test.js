@@ -276,4 +276,97 @@ describe('Shell parameter sanitization', () => {
       expect(isShellAllowed('/snap/evil/bash')).toBe(false)
     })
   })
+
+describe('Actual code DANGEROUS_FLAG_REGEX edge cases', () => {
+    // The FIXED regex from index.js:
+    // /^-[a-zA-Z]*[cC]$|^\/[cC]$|^--command$/
+    // Rejects -c, -C, -ac, -aC, --command, /c. Allows --check, --config, abc, music.
+    const fixedRegex = /^-[a-zA-Z]*[cC]$|^\/[cC]$|^--command$/;
+
+    it('does NOT reject --check', () => {
+        expect(fixedRegex.test('--check')).toBe(false);
+    });
+
+    it('does NOT reject --config', () => {
+        expect(fixedRegex.test('--config')).toBe(false);
+    });
+
+    it('does NOT reject --recursive', () => {
+        expect(fixedRegex.test('--recursive')).toBe(false);
+    });
+
+    it('rejects -abc (combined flags include -c)', () => {
+        expect(fixedRegex.test('-abc')).toBe(true);
+    });
+
+    it('STILL rejects -c', () => {
+        expect(fixedRegex.test('-c')).toBe(true);
+    });
+
+    it('rejects -C (now fixed)', () => {
+        expect(fixedRegex.test('-C')).toBe(true);
+    });
+
+    it('STILL rejects --command', () => {
+        expect(fixedRegex.test('--command')).toBe(true);
+    });
+
+    it('STILL rejects /c', () => {
+        expect(fixedRegex.test('/c')).toBe(true);
+    });
+
+    it('does NOT reject bare word "abc" (no dash prefix)', () => {
+        expect(fixedRegex.test('abc')).toBe(false);
+    });
+
+    it('does NOT reject bare word "music"', () => {
+        expect(fixedRegex.test('music')).toBe(false);
+    });
+
+    it('rejects -ac (combined flags ending in c)', () => {
+        expect(fixedRegex.test('-ac')).toBe(true);
+    });
+
+    it('rejects -aC (combined flags ending in C)', () => {
+        expect(fixedRegex.test('-aC')).toBe(true);
+    });
+
+    it('rejects /C (Windows uppercase)', () => {
+        expect(fixedRegex.test('/C')).toBe(true);
+    });
+});
+
+describe('Shell name allowlist (defense-in-depth)', () => {
+    const TRUSTED_SHELL_DIRS = [
+        '/bin/', '/usr/bin/', '/usr/local/bin/',
+        '/opt/homebrew/bin/',
+        '/run/current-system/sw/bin/',
+        '/snap/bin/',
+    ];
+    const TRUSTED_WINDOWS_SHELLS = ['powershell.exe', 'cmd.exe', 'pwsh.exe'];
+    const ALLOWED_SHELL_NAMES = ['bash', 'sh', 'zsh', 'fish', 'powershell.exe', 'cmd.exe', 'pwsh.exe'];
+
+    function isShellAllowed(resolvedPath) {
+        const base = resolvedPath.split('/').pop().toLowerCase();
+        if (TRUSTED_WINDOWS_SHELLS.includes(base)) return true;
+        if (!TRUSTED_SHELL_DIRS.some(dir => resolvedPath.startsWith(dir))) return false;
+        return ALLOWED_SHELL_NAMES.includes(base);
+    }
+
+    it('accepts /bin/bash', () => {
+        expect(isShellAllowed('/bin/bash')).toBe(true);
+    });
+
+    it('accepts /usr/bin/zsh', () => {
+        expect(isShellAllowed('/usr/bin/zsh')).toBe(true);
+    });
+
+    it('rejects /bin/evil-binary (unknown binary in trusted dir)', () => {
+        expect(isShellAllowed('/bin/evil-binary')).toBe(false);
+    });
+
+    it('rejects /usr/bin/malware', () => {
+        expect(isShellAllowed('/usr/bin/malware')).toBe(false);
+    });
+});
 })

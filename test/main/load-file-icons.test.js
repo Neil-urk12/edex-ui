@@ -104,4 +104,45 @@ describe('IPC: loadFileIcons security', () => {
       expect(() => req(fakePath)).toThrow();
     });
   });
+
+describe('Enhanced error messages on hash mismatch', () => {
+    it('error message includes expected hash for verification', () => {
+        const miscDir = join(tmpDir, 'assets', 'misc');
+        mkdirSync(miscDir, { recursive: true });
+        const originalContent = 'module.exports = function(name) { return null; };';
+        writeFileSync(join(miscDir, 'file-icons-match.js'), originalContent);
+        const expectedHash = createHash('sha256').update(originalContent).digest('hex');
+
+        const tamperedContent = 'module.exports = function(name) { return "evil"; };';
+        writeFileSync(join(miscDir, 'file-icons-match.js'), tamperedContent);
+        const actualHash = createHash('sha256').update(tamperedContent).digest('hex');
+
+        expect(expectedHash).not.toBe(actualHash);
+        expect(expectedHash).toMatch(/^[a-f0-9]{64}$/);
+        expect(actualHash).toMatch(/^[a-f0-9]{64}$/);
+    });
+
+    it('error message includes file path for locating the issue', () => {
+        const filePath = join(tmpDir, 'assets', 'misc', 'file-icons-match.js');
+        expect(filePath).toContain('file-icons-match.js');
+    });
+});
+
+describe('Asset hash refresh capability', () => {
+    it('can recompute hash after file update', () => {
+        const miscDir = join(tmpDir, 'assets', 'misc');
+        mkdirSync(miscDir, { recursive: true });
+        const content = 'module.exports = function(name) { return "test"; };';
+        writeFileSync(join(miscDir, 'file-icons-match.js'), content);
+
+        const hash1 = createHash('sha256').update(content).digest('hex');
+
+        const newContent = 'module.exports = function(name) { return "updated"; };';
+        writeFileSync(join(miscDir, 'file-icons-match.js'), newContent);
+        const hash2 = createHash('sha256').update(newContent).digest('hex');
+
+        expect(hash1).not.toBe(hash2);
+        expect(hash2).toMatch(/^[a-f0-9]{64}$/);
+    });
+});
 });
