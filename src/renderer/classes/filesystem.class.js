@@ -64,6 +64,7 @@ class FilesystemDisplay {
                 <h3>Calculating available space...</h3><progress value="100" max="100"></progress>
             </div>`;
         this.filesContainer = document.getElementById("fs_disp_container");
+        this._container = container;
         this.space_bar = {
             text: document.querySelector("#fs_space_bar > h3"),
             bar: document.querySelector("#fs_space_bar > progress")
@@ -72,13 +73,14 @@ class FilesystemDisplay {
         this.dirpath = "";
         this.failed = false;
         this._noTracking = false;
+        this._disposed = false;
         this._runNextTick = false;
         this._reading = false;
 
         this._timer = setInterval(() => {
             if (this._runNextTick === true) {
                 this._runNextTick = false;
-                this.readFS(this.dirpath);
+                this.readFS(this.dirpath).catch(err => console.warn('Timer readFS failed:', err)); // defensive: readFS handles errors internally
             }
         }, 1000);
 
@@ -105,10 +107,10 @@ class FilesystemDisplay {
                         this._fsWatcherUnsub = null;
                     }
                     if (cwd.startsWith("FALLBACK |-- ")) {
-                        this.readFS(cwd.slice(13));
+                        this.readFS(cwd.slice(13)).catch(err => console.warn('CWD readFS failed:', err)); // defensive: readFS handles errors internally
                         this._noTracking = true;
                     } else {
-                        this.readFS(cwd);
+                        this.readFS(cwd).catch(err => console.warn('CWD readFS failed:', err)); // defensive: readFS handles errors internally
                         this.watchFS(cwd);
                     }
                 }
@@ -122,7 +124,9 @@ class FilesystemDisplay {
                 this._fsWatcherUnsub = null;
             }
             await window.electronAPI.watchDirectory(dir);
+            if (this._disposed) return;
             this._fsWatcherUnsub = window.electronAPI.onFsChanged((eventType) => {
+                if (this._disposed) return;
                 if (eventType !== "change") {
                     this._runNextTick = true;
                 }
@@ -150,7 +154,7 @@ class FilesystemDisplay {
         };
 
         this.readFS = async dir => {
-            if (this.failed === true || this._reading) return false;
+            if (this.failed === true || this._reading || this._disposed) return false;
             this._reading = true;
 
             document.getElementById("fs_disp_title_dir").innerText = this.dirpath;
@@ -174,8 +178,10 @@ class FilesystemDisplay {
                     this.failed = true;
                 } else if (this._noTracking === true && this.dirpath) {
                     this.setFailedState();
-                    setTimeout(() => {
-                        this.readFS(this.dirpath);
+                    this._retryTimeout = setTimeout(() => {
+                        this._retryTimeout = null;
+                        if (this._disposed) return;
+                        this.readFS(this.dirpath).catch(err => console.warn('Retry readFS failed:', err));
                     }, 1000);
                 } else {
                     this.setFailedState();
@@ -183,6 +189,8 @@ class FilesystemDisplay {
                 this._reading = false;
                 return;
             }
+
+            if (this._disposed) { this._reading = false; return; }
 
             this.reCalculateDiskUsage(tcwd);
 
@@ -257,6 +265,8 @@ class FilesystemDisplay {
                 });
             }).catch(() => { this.setFailedState() });
 
+            if (this._disposed) { this._reading = false; return; }
+
             if (this.failed) { this._reading = false; return false; }
 
             let ordering = {
@@ -288,7 +298,7 @@ class FilesystemDisplay {
         };
 
         this.readDevices = async () => {
-            if (this.failed === true) return false;
+            if (this.failed === true || this._disposed) return false;
 
             let blocks;
             try {
@@ -312,7 +322,7 @@ class FilesystemDisplay {
                     }
 
                     devices.push({
-                        name: (block.label !== "") ? `${block.label} (${block.name})` : `${block.mount} (${block.name})`,
+                        name: (block.label !== "") ? escapeHtml(`${block.label} (${block.name})`) : escapeHtml(`${block.mount} (${block.name})`),
                         type,
                         path: block.mount
                     });
@@ -501,7 +511,7 @@ class FilesystemDisplay {
             if (document.getElementById("fs_space_bar").onclick || fsBlock === null) return;
 
             let splitter = (navigator.platform.includes('Win')) ? "\\" : "/";
-            let displayMount = (fsBlock.mount.length < 18) ? fsBlock.mount : "..."+splitter+fsBlock.mount.split(splitter).pop();
+            let displayMount = escapeHtml((fsBlock.mount.length < 18) ? fsBlock.mount : "..."+splitter+fsBlock.mount.split(splitter).pop());
 
             if (!isNaN(fsBlock.use)) {
                 this.space_bar.text.innerHTML = `Mount <strong>${displayMount}</strong> used <strong>${Math.round(fsBlock.use)}%</strong>`;
@@ -749,13 +759,40 @@ class FilesystemDisplay {
         }
     }
 
+    dispose() {
+        this._disposed = true;
+        clearInterval(this._timer);
+        this._timer = null;
+        if (this._clickHandler && this._clickHandlerTarget) {
+            this._clickHandlerTarget.removeEventListener('click', this._clickHandler);
+            this._clickHandler = null;
+            this._clickHandlerTarget = null;
+        }
+        if (this._cwdUnsub) {
+            this._cwdUnsub();
+            this._cwdUnsub = null;
+        }
+        if (this._fsWatcherUnsub) {
+            this._fsWatcherUnsub();
+            this._fsWatcherUnsub = null;
+        }
+        if (this._retryTimeout) {
+            clearTimeout(this._retryTimeout);
+            this._retryTimeout = null;
+        }
+        this._container = null;
+        this.space_bar = null;
+        this.filesContainer = null;
+        this.failed = true;
+    }
+
     _attachFileClickHandlers(blockList) {
         // Remove previous listener to prevent leaks
         if (this._clickHandler) {
             this._clickHandlerTarget.removeEventListener('click', this._clickHandler);
         }
 
-        const container = document.getElementById('filesystem');
+        const container = this._container;
         if (!container) return;
 
         this._clickHandler = (event) => {
@@ -792,7 +829,7 @@ class FilesystemDisplay {
             // up: navigate to parent
             if (e.type === 'up') {
                 if (this._noTracking) {
-                    this.readFS(pathResolve(this.dirpath, '..'));
+                    this.readFS(pathResolve(this.dirpath, '..')).catch(err => console.warn('Navigate up readFS failed:', err)); // defensive: readFS handles errors internally
                 } else {
                     window.term[window.currentTerm].writelr('cd ..');
                 }
@@ -823,7 +860,7 @@ class FilesystemDisplay {
             // disk/rom/usb
             if (e.type === 'disk' || e.type === 'rom' || e.type === 'usb') {
                 if (this._noTracking) {
-                    this.readFS(cwdEntry.path);
+                    this.readFS(cwdEntry.path).catch(err => console.warn('Disk readFS failed:', err)); // defensive: readFS handles errors internally
                 } else {
                     if (isWin) {
                         window.term[window.currentTerm].writelr(cwdEntry.path);
@@ -837,7 +874,7 @@ class FilesystemDisplay {
             // directory
             if (e.type === 'dir' || e.type.endsWith('Dir')) {
                 if (this._noTracking) {
-                    this.readFS(cwdEntry.path);
+                    this.readFS(cwdEntry.path).catch(err => console.warn('Dir readFS failed:', err)); // defensive: readFS handles errors internally
                 } else {
                     window.term[window.currentTerm].writelr('cd "' + cwdEntry.name + '"');
                 }
