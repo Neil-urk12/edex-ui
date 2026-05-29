@@ -1,13 +1,17 @@
 import { app, BrowserWindow, ipcMain, shell, screen, clipboard, globalShortcut, dialog, protocol, net } from 'electron'
-import { join, dirname, resolve, relative, sep, isAbsolute, extname, basename } from 'path'
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, lstatSync, watch, realpathSync } from 'fs'
+import { join, dirname, isAbsolute, extname, basename } from 'path'
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, lstatSync, watch } from 'fs'
 import { createHash } from 'crypto'
 import { fileURLToPath, pathToFileURL } from 'url'
 import which from 'which'
 import shellEnv from 'shell-env'
-import si from 'systeminformation'
+import { register as registerSystemHandlers } from './ipc-system.js'
+import { register as registerSettingsHandlers } from './ipc-settings.js'
+import { register as registerAssetHandlers } from './ipc-assets.js'
+import { register as registerFilesystemHandlers, dispose as disposeFilesystemWatchers } from './ipc-filesystem.js'
 import { TerminalSession } from './terminal.js'
 import { validateFilename, validateAndResolve, validateWithin, validateAssetPath } from './ipc-validation.js'
+import si from 'systeminformation'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -143,33 +147,8 @@ if (!versionHistory[version]) {
 }
 writeFileSync(versionHistoryPath, JSON.stringify(versionHistory, null, 2))
 
-// --- Settings IPC ---
-ipcMain.handle('getSettings', () => {
-  let settings
-  try { settings = JSON.parse(readFileSync(settingsFile, 'utf-8')) } catch (_) { settings = { ...defaultSettings } }
-  settings.settingsDir = userData
-  settings.themesPath = join(userData, 'themes')
-  settings.kbLayoutPath = join(userData, 'keyboards')
-  settings.settingsFile = settingsFile
-  return settings
-})
-
-const SETTINGS_ALLOWLIST = [
-  'keyboard', 'theme', 'termFontSize', 'audio', 'audioVolume', 'disableFeedbackAudio',
-  'clockHours', 'pingAddr', 'port', 'nointro', 'nocursor', 'forceFullscreen', 'allowWindowed',
-  'excludeThreadsFromToplist', 'hideDotfiles', 'fsListView', 'experimentalGlobeFeatures', 'experimentalFeatures'
-]
-ipcMain.handle('saveSettings', (_event, partial) => {
-  let settings = { ...defaultSettings }
-  try { Object.assign(settings, JSON.parse(readFileSync(settingsFile, 'utf-8'))) } catch (_) {}
-  if (partial && typeof partial === 'object') {
-    for (const key of SETTINGS_ALLOWLIST) {
-      if (Object.hasOwn(partial, key)) settings[key] = partial[key]
-    }
-  }
-  writeFileSync(settingsFile, JSON.stringify(settings, null, 4))
-  return settings
-})
+// --- Settings IPC (delegated to ipc-settings.js) ---
+registerSettingsHandlers(ipcMain, { settingsFile, defaultSettings, userData, readFileSync, writeFileSync })
 
 const SAFE_OPEN_EXTENSIONS = [
   // Original
@@ -235,134 +214,21 @@ ipcMain.handle('unregisterShortcut', (_event, accelerator) => {
   globalShortcut.unregister(accelerator)
 })
 
-// --- Asset content IPC ---
-ipcMain.handle('readAsset', (_event, relativePath) => {
-  const absResolved = validateAssetPath(relativePath, userData)
-  return readFileSync(absResolved, 'utf-8')
-})
-ipcMain.handle('loadFileIcons', async (_event) => {
-  const resolved = validateAssetPath('misc/file-icons-match.js', userData)
-  // Verify file integrity before executing to prevent RCE via tampered assets
-  const content = readFileSync(resolved, 'utf-8')
-  const actualHash = createHash('sha256').update(content).digest('hex')
-  if (!assetHashes['misc/file-icons-match.js']) {
-    throw new Error('Asset hash not available for misc/file-icons-match.js — file may have been added after startup. Restart the app to regenerate hashes.')
-  }
-  if (actualHash !== assetHashes['misc/file-icons-match.js']) {
-    throw new Error(`Asset integrity check failed: misc/file-icons-match.js has been tampered with. Expected ${assetHashes['misc/file-icons-match.js'].slice(0, 16)}, got ${actualHash.slice(0, 16)}`)
-  }
-  const { createRequire } = await import('module')
-  const req = createRequire(resolved)
-  return req(resolved)
-})
-ipcMain.handle('readFileBinary', (_event, filePath) => {
-  const resolved = validateWithin(filePath, userData)
-  return readFileSync(resolved).toString('base64')
-})
-ipcMain.handle('getTheme', (_event, name) => {
-  const resolved = validateAndResolve(name + '.json', themesDir)
-  return JSON.parse(readFileSync(resolved, 'utf-8'))
-})
-ipcMain.handle('getKeyboardLayout', (_event, name) => {
-  const resolved = validateAndResolve(name, kblayoutsDir)
-  return JSON.parse(readFileSync(resolved, 'utf-8'))
-})
-ipcMain.handle('getAudioUrl', (_event, filename) => {
-  validateAndResolve(filename, join(userData, 'assets', 'audio'))
-  return `edex-audio://${filename}`
-})
-ipcMain.handle('getAudioPath', (_event, filename) => {
-  return validateAndResolve(filename, join(userData, 'assets', 'audio'))
-})
-ipcMain.handle('getThemePath', (_event, name) => {
-  return validateAndResolve(name, themesDir)
-})
-ipcMain.handle('getKeyboardPath', (_event, name) => {
-  return validateAndResolve(name, kblayoutsDir)
+// --- Asset content IPC (delegated to ipc-assets.js) ---
+registerAssetHandlers(ipcMain, {
+  userData, themesDir, kblayoutsDir, assetHashes,
+  readFileSync, createHash,
+  validateAssetPath, validateAndResolve, validateWithin
 })
 
-// --- Theme/keyboard override IPC ---
-let themeOverride = null
-let kbOverride = null
-ipcMain.handle('getThemeOverride', () => themeOverride)
-ipcMain.handle('getKbOverride', () => kbOverride)
-ipcMain.on('setThemeOverride', (_e, arg) => { themeOverride = arg })
-ipcMain.on('setKbOverride', (_e, arg) => { kbOverride = arg })
-
-// --- Path validation --- (moved to ipc-validation.js)
-
-// --- Filesystem IPC ---
-// readdir and stat are intentionally unrestricted (no validateWithin) to support
-// the built-in filesystem browser which navigates arbitrary paths. Only null-byte
-// injection is blocked. readFile/writeFile remain restricted to userData.
-ipcMain.handle('readdir', (_event, dirPath) => {
-  if (!dirPath) return []
-  if (typeof dirPath !== 'string' || dirPath.includes('\0')) throw new Error('Invalid path')
-  try {
-    return readdirSync(dirPath)
-  } catch (e) {
-    if (e.code === 'EPERM') {
-      console.warn('[readdir] EPERM Permission denied:', dirPath)
-      return []
-    }
-    if (e.code === 'ENOENT' || e.code === 'EBUSY') return []
-    return Promise.reject(e)
-  }
+// --- Filesystem IPC (delegated to ipc-filesystem.js) ---
+registerFilesystemHandlers(ipcMain, {
+  userData, readdirSync, lstatSync, readFileSync, writeFileSync,
+  watch, validateWithin, BrowserWindow
 })
 
-ipcMain.handle('stat', (_event, filePath) => {
-  if (!filePath) return null
-  if (typeof filePath !== 'string' || filePath.includes('\0')) throw new Error('Invalid path')
-  try {
-    const stat = lstatSync(filePath)
-    return { isFile: stat.isFile(), isDirectory: stat.isDirectory(), isSymbolicLink: stat.isSymbolicLink(), size: stat.size, mtime: stat.mtime.getTime() }
-  } catch (e) {
-    if (e.code === 'EPERM') {
-      console.warn('[stat] EPERM Permission denied:', filePath)
-      return null
-    }
-    if (e.code === 'ENOENT' || e.code === 'EBUSY') return null
-    return Promise.reject(e)
-  }
-})
-
-ipcMain.handle('readFile', (_event, filePath, encoding) => {
-  const resolved = validateWithin(filePath, userData)
-  return readFileSync(resolved, encoding || 'utf-8')
-})
-
-ipcMain.handle('writeFile', (_event, filePath, content) => {
-  const resolved = validateWithin(filePath, userData)
-  writeFileSync(resolved, content)
-})
-
-let fsWatchers = {}
-ipcMain.handle('watchDirectory', async (_event, dirPath) => {
-  const resolved = validateWithin(dirPath, userData)
-  if (fsWatchers[resolved]) return
-  try {
-    const watcher = watch(resolved, () => {
-      const win = BrowserWindow.getAllWindows()[0]
-      if (win) win.webContents.send('fs-changed', 'change')
-    })
-    fsWatchers[resolved] = watcher
-  } catch (_) {}
-})
-
-// --- System information IPC ---
-ipcMain.handle('getCpuInfo', () => si.cpu())
-ipcMain.handle('getCpuLoad', () => si.currentLoad())
-ipcMain.handle('getMemoryInfo', () => si.mem())
-ipcMain.handle('getCpuTemperature', () => si.cpuTemperature())
-ipcMain.handle('getProcesses', () => si.processes())
-ipcMain.handle('getBattery', () => si.battery())
-ipcMain.handle('getNetworkInterfaces', () => si.networkInterfaces())
-ipcMain.handle('getNetworkStats', (_event, iface) => si.networkStats(iface))
-ipcMain.handle('getBlockDevices', () => si.blockDevices())
-ipcMain.handle('getFsSize', () => si.fsSize())
-ipcMain.handle('getSystemInfo', () => si.system())
-ipcMain.handle('getChassisInfo', () => si.chassis())
-ipcMain.handle('getSystemUptime', () => si.time())
+// --- System information IPC (delegated to ipc-system.js) ---
+registerSystemHandlers(ipcMain, { si })
 
 // --- Terminal PTY management ---
 const terminals = new Map()
@@ -607,6 +473,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   globalShortcut.unregisterAll()
+  disposeFilesystemWatchers()
   for (const [, session] of terminals) {
     try { session.kill() } catch (_) {}
   }

@@ -1,0 +1,15 @@
+export function register(ipcMain, { si }) {
+  ipcMain.handle('getCpuInfo', () => si.cpu())
+  ipcMain.handle('getCpuLoad', () => si.currentLoad())
+  ipcMain.handle('getMemoryInfo', () => si.mem())
+  ipcMain.handle('getCpuTemperature', () => si.cpuTemperature())
+  ipcMain.handle('getProcesses', () => si.processes())
+  ipcMain.handle('getBattery', () => si.battery())
+  ipcMain.handle('getNetworkInterfaces', () => si.networkInterfaces())
+  ipcMain.handle('getNetworkStats', (_event, iface) => si.networkStats(iface))
+  ipcMain.handle('getBlockDevices', () => si.blockDevices())
+  ipcMain.handle('getFsSize', () => si.fsSize())
+  ipcMain.handle('getSystemInfo', () => si.system())
+  ipcMain.handle('getChassisInfo', () => si.chassis())
+  ipcMain.handle('getSystemUptime', () => si.time())
+}
