@@ -1,5 +1,5 @@
 // eDEX-UI Renderer Entry Point (Electron 33+, contextIsolation, no Node.js in renderer)
-import { escapeHtml, purifyCSS, delay } from './utils.js';
+import { escapeHtml, purifyCSS, delay, clampColor } from './utils.js';
 import { createAudioManager } from './classes/audiofx.class.js';
 import { createKeyboard } from './classes/keyboard.class.js';
 import { Modal } from './classes/modal.class.js';
@@ -69,12 +69,6 @@ if (kbOverride !== null) {
 // Load UI theme
 // ============================================================
 
-/** Clamp a color value to a valid integer in [0, 255]. */
-function _clampColor(v) {
-    const n = Number(v);
-    if (!Number.isFinite(n)) return 0;
-    return Math.min(255, Math.max(0, Math.round(n)));
-}
 window._loadTheme = async (theme) => {
     if (document.querySelector("style.theming")) {
         document.querySelector("style.theming").remove();
@@ -134,9 +128,9 @@ window._loadTheme = async (theme) => {
     </style>`;
 
     window.theme = theme;
-    window.theme.r = _clampColor(theme.colors.r);
-    window.theme.g = _clampColor(theme.colors.g);
-    window.theme.b = _clampColor(theme.colors.b);
+    window.theme.r = clampColor(theme.colors.r);
+    window.theme.g = clampColor(theme.colors.g);
+    window.theme.b = clampColor(theme.colors.b);
 };
 
 // Load theme JSON via electronAPI

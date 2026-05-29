@@ -32,3 +32,9 @@ export function delay(ms) {
         setTimeout(resolve, ms);
     });
 }
+
+export function clampColor(v) {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return 0;
+    return Math.min(255, Math.max(0, Math.round(n)));
+}

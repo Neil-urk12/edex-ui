@@ -535,7 +535,7 @@ class FilesystemDisplay {
             this.readFS(window.settings.cwd || '/');
         }
 
-        this.openFile = async (name, _path, _type) => {
+        this.openFile = async (name) => {
             let block;
 
             if (typeof name === "number") {

@@ -1,17 +1,7 @@
 // eDEX-UI boot sequence utilities (ES module port)
 // Extracted from main.js for testability
 
-/**
- * Clamp a color value to a valid integer in [0, 255].
- * Returns 0 for non-numeric, NaN, or missing values.
- * @param {*} v
- * @returns {number}
- */
-function clampColor(v) {
-    const n = Number(v);
-    if (!Number.isFinite(n)) return 0;
-    return Math.min(255, Math.max(0, Math.round(n)));
-}
+import { clampColor } from './utils.js';
 
 /**
  * Load boot log text from the misc/boot_log.txt asset.

@@ -600,6 +600,20 @@ describe('FilesystemDisplay - readFS never rejects (defensive .catch)', () => {
     const result = await fsd.readFS('/tmp/test');
     expect(result).toBe(false);
   });
+
+  it('openFile accepts exactly one argument (cwd index or name)', async () => {
+    // openFile signature is (name) — no extra path/type params.
+    // The function derives path from cwd entries, not from arguments.
+    mockElectronAPI.readdir.mockResolvedValue(['readme.txt']);
+    mockElectronAPI.stat.mockResolvedValue({
+      isFile: true, isDirectory: false, size: 100, mtime: Date.now()
+    });
+    mockElectronAPI.readFile.mockResolvedValue('hello');
+    const fsd = new FilesystemDisplay({ parentId: 'fs_parent5' });
+    await fsd.readFS('/tmp/test');
+    // openFile should accept just the cwd index
+    expect(fsd.openFile.length).toBe(1); // .length = param count
+  });
 });
 
 describe('FilesystemDisplay - readFS entry processing', () => {

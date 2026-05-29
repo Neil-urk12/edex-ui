@@ -41,6 +41,17 @@ describe('Dependency Audit', () => {
     }
   });
 
+  describe('vite uses caret range like other deps', () => {
+    it('vite should use ^ prefix, not ~', () => {
+      const raw = pkg.dependencies.vite;
+      expect(raw, 'vite exists in dependencies').toBeDefined();
+      expect(
+        raw.startsWith('^'),
+        `vite is "${raw}", should use ^ for consistency with other deps`
+      ).toBe(true);
+    });
+  });
+
   describe('node-abi is not stale-pinned', () => {
     it('node-abi should use range prefix (^) not exact pin', () => {
       const raw = pkg.dependencies['node-abi'];
