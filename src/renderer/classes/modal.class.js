@@ -1,11 +1,12 @@
 // eDEX-UI Modal class (ES module port)
 // Original by Gabriel 'Squared' SAILLARD
 
+import { escapeHtml } from '../utils.js';
+
 window.modals = {};
 
 let _focusedId = null;
 
-export const _esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
 export class Modal {
     constructor(options, onclose) {
         if (!options || !options.type) throw new Error("Missing parameters");
@@ -58,13 +59,13 @@ export class Modal {
         const titleId = `modal_title_${this.id}`;
         // options.html is escaped by default; pass { rawHtml: true } to skip escaping
         let DOMstring = `<div id="modal_${this.id}" class="${this.classes}" style="z-index:${zindex+Object.keys(window.modals).length};" augmented-ui="${augs.join(" ")} exe" role="dialog" aria-modal="true" aria-labelledby="${titleId}">
-            <h1 id="${titleId}">${_esc(this.title)}</h1>
-            ${this.type === "custom" ? (options.rawHtml ? options.html : _esc(options.html)) : "<h5>"+_esc(this.message)+"</h5>"}
+            <h1 id="${titleId}">${escapeHtml(this.title)}</h1>
+            ${this.type === "custom" ? (options.rawHtml ? options.html : escapeHtml(options.html)) : "<h5>"+escapeHtml(this.message)+"</h5>"}
             <div>`;
             const buttonActions = [];
             buttons.forEach((b, i) => {
                 buttonActions.push(b.action);
-                DOMstring += `<button data-action-idx="${i}">${_esc(b.label)}</button>`;
+                DOMstring += `<button data-action-idx="${i}">${escapeHtml(b.label)}</button>`;
             });
         DOMstring += `</div>
         </div>`;

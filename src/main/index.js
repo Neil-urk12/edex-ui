@@ -1,6 +1,6 @@
 import { app, BrowserWindow, ipcMain, shell, screen, clipboard, globalShortcut, dialog, protocol, net } from 'electron'
 import { join, dirname, extname, basename } from 'path'
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, lstatSync, watch } from 'fs'
+import { existsSync, readdirSync, readFileSync, writeFileSync, lstatSync, watch } from 'fs'
 import { createHash } from 'crypto'
 import { fileURLToPath, pathToFileURL } from 'url'
 import which from 'which'
@@ -12,6 +12,7 @@ import { register as registerFilesystemHandlers, dispose as disposeFilesystemWat
 import { TerminalSession } from './terminal.js'
 import { validateFilename, validateAndResolve, validateWithin, validateAssetPath } from './ipc-validation.js'
 import si from 'systeminformation'
+import { sendToMainWindow, readJsonFile, ensureDir } from './ipc-helpers.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -52,7 +53,7 @@ delete process.env.https_proxy
 
 // --- Ensure userData dirs ---
 for (const dir of [userData, themesDir, kblayoutsDir, fontsDir]) {
-  try { mkdirSync(dir) } catch {}
+  ensureDir(dir)
 }
 
 // --- Default settings ---
@@ -109,7 +110,7 @@ if (!existsSync(lastWindowStateFile)) {
 
 // --- Mirror assets to userData ---
 function mirrorAssets(srcDir, destDir) {
-  try { mkdirSync(destDir, { recursive: true }) } catch {}
+  ensureDir(destDir, { recursive: true })
   for (const file of readdirSync(srcDir)) {
     const src = join(srcDir, file)
     const dest = join(destDir, file)
@@ -138,7 +139,7 @@ for (const relPath of hashedAssets) {
 // --- Version history ---
 const versionHistoryPath = join(userData, 'versions_log.json')
 let versionHistory = {}
-try { versionHistory = JSON.parse(readFileSync(versionHistoryPath, 'utf-8')) } catch {}
+versionHistory = readJsonFile(versionHistoryPath, {})
 const version = app.getVersion()
 if (!versionHistory[version]) {
   versionHistory[version] = { firstSeen: Date.now(), lastSeen: Date.now() }
@@ -148,7 +149,7 @@ if (!versionHistory[version]) {
 writeFileSync(versionHistoryPath, JSON.stringify(versionHistory, null, 2))
 
 // --- Settings IPC (delegated to ipc-settings.js) ---
-registerSettingsHandlers(ipcMain, { settingsFile, defaultSettings, userData, readFileSync, writeFileSync })
+registerSettingsHandlers(ipcMain, { settingsFile, defaultSettings, userData, writeFileSync })
 
 const SAFE_OPEN_EXTENSIONS = [
   // Original
@@ -207,7 +208,7 @@ ipcMain.handle('registerShortcut', (_event, accelerator, id) => {
       if (win) win.webContents.send('shortcut-triggered', id)
     })
     return true
-  } catch { return false }
+  } catch (e) { console.warn('[registerShortcut] Failed for', accelerator, e.message); return false }
 })
 
 ipcMain.handle('unregisterShortcut', (_event, accelerator) => {
@@ -236,7 +237,7 @@ let nextTerminalId = 0
 let mainWindow = null
 
 ipcMain.handle('terminal:create', async (_event, options) => {
-  const settings = JSON.parse(readFileSync(settingsFile, 'utf-8'))
+  const settings = readJsonFile(settingsFile, { ...defaultSettings })
   let cleanEnv
   try {
     cleanEnv = await shellEnv(settings.shell)
@@ -301,25 +302,17 @@ ipcMain.handle('terminal:create', async (_event, options) => {
     cwd: options.cwd ? validateWithin(options.cwd, userData) : settings.cwd,
     env: cleanEnv,
     ondata: (_id, data) => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('terminal:data', { id, data })
-      }
+      sendToMainWindow(mainWindow, 'terminal:data', { id, data })
     },
     onexit: (_id, exitCode, signal) => {
       terminals.delete(id)
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('terminal:exit', { id, exitCode, signal })
-      }
+      sendToMainWindow(mainWindow, 'terminal:exit', { id, exitCode, signal })
     },
     oncwd: (_id, cwd) => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('terminal:cwd-changed', { id, cwd })
-      }
+      sendToMainWindow(mainWindow, 'terminal:cwd-changed', { id, cwd })
     },
     onprocess: (_id, proc) => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('terminal:process-changed', { id, process: proc })
-      }
+      sendToMainWindow(mainWindow, 'terminal:process-changed', { id, process: proc })
     }
   })
   terminals.set(id, session)
@@ -445,7 +438,7 @@ app.whenReady().then(async () => {
     return net.fetch(pathToFileURL(resolved).href)
   })
   let settings = defaultSettings
-  try { settings = JSON.parse(readFileSync(settingsFile, 'utf-8')) } catch {}
+  settings = readJsonFile(settingsFile, defaultSettings)
 
   // Resolve shell path
   try {
@@ -459,7 +452,7 @@ app.whenReady().then(async () => {
   // Copy audio assets to userData (for howler.js access)
   const audioSrc = join(assetsBase, 'audio')
   const audioDest = join(userData, 'assets', 'audio')
-  try { mkdirSync(audioDest, { recursive: true }) } catch {}
+  ensureDir(audioDest, { recursive: true })
   if (existsSync(audioSrc)) {
     for (const file of readdirSync(audioSrc)) {
       writeFileSync(join(audioDest, file), readFileSync(join(audioSrc, file)))
@@ -469,7 +462,7 @@ app.whenReady().then(async () => {
   // Also copy boot_log.txt
   const miscSrc = join(assetsBase, 'misc')
   const miscDest = join(userData, 'assets', 'misc')
-  try { mkdirSync(miscDest, { recursive: true }) } catch {}
+  ensureDir(miscDest, { recursive: true })
   if (existsSync(join(miscSrc, 'boot_log.txt'))) {
     writeFileSync(join(miscDest, 'boot_log.txt'), readFileSync(join(miscSrc, 'boot_log.txt')))
   }
@@ -484,6 +477,6 @@ app.on('before-quit', () => {
   globalShortcut.unregisterAll()
   disposeFilesystemWatchers()
   for (const [, session] of terminals) {
-    try { session.kill() } catch {}
+    try { session.kill() } catch (e) { console.warn('[before-quit] Failed to kill terminal session:', e.message) }
   }
 })

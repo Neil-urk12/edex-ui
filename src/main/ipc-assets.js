@@ -1,4 +1,5 @@
 import { join } from 'path'
+import { readJsonFile } from './ipc-helpers.js'
 
 let themeOverride = null
 let kbOverride = null
@@ -32,12 +33,12 @@ export function register(ipcMain, { userData, themesDir, kblayoutsDir, assetHash
 
   ipcMain.handle('getTheme', (_event, name) => {
     const resolved = validateAndResolve(name + '.json', themesDir)
-    return JSON.parse(readFileSync(resolved, 'utf-8'))
+    return readJsonFile(resolved, {})
   })
 
   ipcMain.handle('getKeyboardLayout', (_event, name) => {
     const resolved = validateAndResolve(name, kblayoutsDir)
-    return JSON.parse(readFileSync(resolved, 'utf-8'))
+    return readJsonFile(resolved, {})
   })
 
   ipcMain.handle('getAudioUrl', (_event, filename) => {

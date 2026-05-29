@@ -55,13 +55,13 @@ export function register(ipcMain, { userData, readdirSync, lstatSync, readFileSy
         if (win) win.webContents.send('fs-changed', 'change')
       })
       fsWatchers[resolved] = watcher
-    } catch {}
+    } catch (e) { console.warn('[watchDirectory] Failed to watch:', resolved, e.message) }
   })
 }
 
 export function dispose() {
   for (const watcher of Object.values(fsWatchers)) {
-    try { watcher.close() } catch {}
+    try { watcher.close() } catch (e) { console.warn('[dispose] Failed to close watcher:', e.message) }
   }
   fsWatchers = {}
 }

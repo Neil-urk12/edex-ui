@@ -1,3 +1,5 @@
+const BYTES_PER_GIB = 1073741824; // 2^30
+
 class RAMwatcher {
     constructor(parentId) {
         if (!parentId) throw new Error("Missing parameters");
@@ -63,15 +65,15 @@ class RAMwatcher {
             });
 
             // Update info text
-            let totalGiB = Math.round((data.total/1073742000)*10)/10; // 1073742000 bytes = 1 Gibibyte (GiB), the *10 is to round to .1 decimal
-            let usedGiB = Math.round((data.active/1073742000)*10)/10;
+            let totalGiB = Math.round((data.total/BYTES_PER_GIB)*10)/10;
+            let usedGiB = Math.round((data.active/BYTES_PER_GIB)*10)/10;
             document.getElementById("mod_ramwatcher_info").innerText = `USING ${usedGiB} OUT OF ${totalGiB} GiB`;
 
             // Update swap indicator
             let usedSwap = Math.round((100*data.swapused)/data.swaptotal);
             document.getElementById("mod_ramwatcher_swapbar").value = usedSwap || 0;
 
-            let usedSwapGiB = Math.round((data.swapused/1073742000)*10)/10;
+            let usedSwapGiB = Math.round((data.swapused/BYTES_PER_GIB)*10)/10;
             document.getElementById("mod_ramwatcher_swaptext").innerText = `${usedSwapGiB} GiB`;
 
             this.currentlyUpdating = false;
@@ -85,6 +87,10 @@ class RAMwatcher {
             let j = Math.floor(Math.random() * (i + 1));
             [array[i], array[j]] = [array[j], array[i]];
         }
+    }
+
+    dispose() {
+        clearInterval(this.infoUpdater);
     }
 }
 

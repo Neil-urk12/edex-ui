@@ -63,7 +63,10 @@ export class HardwareInspector {
         }).slice(0, maxWords).join(" ");
     }
 
-    cleanup() {
+    dispose() {
         clearInterval(this._intervalId);
     }
+
+    /** @deprecated Use dispose() */
+    cleanup() { this.dispose(); }
 }

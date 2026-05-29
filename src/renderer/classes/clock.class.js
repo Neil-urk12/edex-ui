@@ -46,4 +46,8 @@ export class Clock {
         document.getElementById("mod_clock_text").innerHTML = clockString;
         this.lastTime = time;
     }
+
+    dispose() {
+        clearInterval(this.updater);
+    }
 }

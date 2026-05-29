@@ -126,11 +126,14 @@ export class Cpuinfo {
         this.updatingCPUtemp = false;
     }
 
-    cleanup() {
+    dispose() {
         this._resetGuardFlags();
         clearInterval(this.loadUpdater);
         clearInterval(this.tempUpdater);
         clearInterval(this.speedUpdater);
         clearInterval(this.tasksUpdater);
     }
+
+    /** @deprecated Use dispose() */
+    cleanup() { this.dispose(); }
 }

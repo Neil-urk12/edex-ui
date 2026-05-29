@@ -11,7 +11,7 @@ const lock = JSON.parse(fs.readFileSync(LOCK_PATH, 'utf8'));
 describe('Dependency Audit', () => {
   describe('electron-builder version is >= 24.0.0', () => {
     it('electron-builder should be at least 24.0.0 to avoid known vulnerabilities', () => {
-      const raw = pkg.dependencies['electron-builder'];
+      const raw = pkg.devDependencies['electron-builder'];
       expect(raw, 'electron-builder exists in dependencies').toBeDefined();
 
       // Strip leading ^ or ~ to get minimum version
@@ -43,7 +43,7 @@ describe('Dependency Audit', () => {
 
   describe('vite uses caret range like other deps', () => {
     it('vite should use ^ prefix, not ~', () => {
-      const raw = pkg.dependencies.vite;
+      const raw = pkg.devDependencies.vite;
       expect(raw, 'vite exists in dependencies').toBeDefined();
       expect(
         raw.startsWith('^'),
@@ -54,7 +54,7 @@ describe('Dependency Audit', () => {
 
   describe('node-abi is not stale-pinned', () => {
     it('node-abi should use range prefix (^) not exact pin', () => {
-      const raw = pkg.dependencies['node-abi'];
+      const raw = pkg.devDependencies['node-abi'];
       expect(raw, 'node-abi exists in dependencies').toBeDefined();
       expect(
         raw.startsWith('^') || raw.startsWith('~'),
@@ -63,7 +63,7 @@ describe('Dependency Audit', () => {
     });
 
     it('node-abi major version should be >= 3', () => {
-      const raw = pkg.dependencies['node-abi'];
+      const raw = pkg.devDependencies['node-abi'];
       expect(raw, 'node-abi exists').toBeDefined();
       const version = raw.replace(/^[^0-9]*/, '');
       const major = Number(version.split('.')[0]);

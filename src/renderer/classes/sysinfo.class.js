@@ -79,4 +79,9 @@ export class Sysinfo {
             document.querySelector("#mod_sysinfo > div:nth-child(4) > h2").innerHTML = "N/A";
         }
     }
+
+    dispose() {
+        clearInterval(this.uptimeUpdater);
+        clearInterval(this.batteryUpdater);
+    }
 }

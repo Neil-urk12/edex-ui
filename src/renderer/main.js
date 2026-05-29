@@ -321,9 +321,9 @@ async function displayTitleScreen() {
 // Get display name
 // ============================================================
 async function getDisplayName() {
-    let user = window.settings.username || null;
+    let user = window.settings.username;
     if (user) return user;
-    return user;
+    return null;
 }
 
 // ============================================================
