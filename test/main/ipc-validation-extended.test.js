@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, mkdirSync, symlinkSync, writeFileSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { validateFilename, validateAndResolve, validateWithin, validateAssetPath } from '../../src/main/ipc-validation.js';
+import { validateFilename, validateWithin, validateAssetPath } from '../../src/main/ipc-validation.js';
 
 describe('validateFilename - encoded traversal rejection', () => {
   it('rejects URL-encoded .. (%2e%2e)', () => {

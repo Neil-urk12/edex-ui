@@ -75,7 +75,7 @@ export class Sysinfo {
             } else {
                 document.querySelector("#mod_sysinfo > div:nth-child(4) > h2").innerHTML = "N/A";
             }
-        } catch (e) {
+        } catch {
             document.querySelector("#mod_sysinfo > div:nth-child(4) > h2").innerHTML = "N/A";
         }
     }

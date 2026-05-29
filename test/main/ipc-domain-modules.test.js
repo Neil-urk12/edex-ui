@@ -1,4 +1,4 @@
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { vi, describe, it, expect, beforeEach } from 'vitest'
 
 // --- Electron mock ---
 vi.mock('electron', () => ({
@@ -104,7 +104,7 @@ vi.mock('../../src/main/terminal.js', () => ({ TerminalSession: vi.fn() }))
 
 // --- Imports ---
 import { ipcMain } from 'electron'
-import { join, resolve } from 'path'
+import { join } from 'path'
 import { createHash } from 'crypto'
 
 // --- Shared constants ---
@@ -138,9 +138,6 @@ const defaultSettings = {
 }
 
 // --- Helpers ---
-function getRegisteredChannels() {
-  return ipcMain.handle.mock.calls.map(([ch]) => ch)
-}
 
 function getHandler(channel) {
   const call = ipcMain.handle.mock.calls.find(([ch]) => ch === channel)

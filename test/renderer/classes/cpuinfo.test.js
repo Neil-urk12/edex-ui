@@ -57,14 +57,14 @@ describe('Cpuinfo', () => {
         });
 
         it('creates DOM container with id "mod_cpuinfo"', () => {
-            const cpuinfo = new Cpuinfo('test-parent');
+            new Cpuinfo('test-parent');
             const container = document.getElementById('mod_cpuinfo');
             expect(container).toBeTruthy();
             expect(container.id).toBe('mod_cpuinfo');
         });
 
         it('calls getCpuInfo to initialize', async () => {
-            const cpuinfo = new Cpuinfo('test-parent');
+            new Cpuinfo('test-parent');
             await vi.waitFor(() => {
                 expect(mockElectronAPI.getCpuInfo).toHaveBeenCalled();
             });
@@ -123,7 +123,7 @@ describe('Cpuinfo', () => {
                 speedMax: 3.0
             });
 
-            const cpuinfo = new Cpuinfo('test-parent');
+            new Cpuinfo('test-parent');
             await vi.advanceTimersByTimeAsync(0); // let getCpuInfo resolve
 
             // Verify the <i id="mod_cpuinfo_cputitle"> element directly
@@ -144,7 +144,7 @@ describe('Cpuinfo', () => {
                 speedMax: 4.0
             });
 
-            const cpuinfo = new Cpuinfo('test-parent');
+            new Cpuinfo('test-parent');
             await vi.advanceTimersByTimeAsync(0);
 
             // halfCores = Math.floor(5/2) = 2, not 2.5

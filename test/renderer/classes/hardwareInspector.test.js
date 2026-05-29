@@ -99,12 +99,11 @@ describe('HardwareInspector constructor', () => {
 // ---------------------------------------------------------------------------
 
 describe('HardwareInspector.updateInfo', () => {
-    let instance
 
     beforeEach(() => {
         mockGetSystemInfo.mockResolvedValue({ manufacturer: 'Dell Inc.', model: 'XPS 15 9570' })
         mockGetChassisInfo.mockResolvedValue({ type: 'Laptop' })
-        instance = new HardwareInspector('test-parent')
+        new HardwareInspector('test-parent')
     })
 
     it('calls window.electronAPI.getSystemInfo()', () => {
@@ -145,7 +144,7 @@ describe('HardwareInspector.updateInfo', () => {
         mockGetChassisInfo.mockResolvedValue({ type: 'Desktop' })
 
         // Should not throw
-        const freshInstance = new HardwareInspector('test-parent')
+        new HardwareInspector('test-parent')
         await expect(vi.advanceTimersByTimeAsync(0)).resolves.not.toThrow()
     })
 
@@ -153,7 +152,7 @@ describe('HardwareInspector.updateInfo', () => {
         mockGetSystemInfo.mockResolvedValue({ manufacturer: 'HP', model: 'EliteBook' })
         mockGetChassisInfo.mockRejectedValue(new Error('IPC failed'))
 
-        const freshInstance = new HardwareInspector('test-parent')
+        new HardwareInspector('test-parent')
         await expect(vi.advanceTimersByTimeAsync(0)).resolves.not.toThrow()
     })
 
@@ -346,7 +345,7 @@ describe('HardwareInspector integration', () => {
         })
         mockGetChassisInfo.mockResolvedValue({ type: 'Notebook' })
 
-        const instance = new HardwareInspector('test-parent')
+        new HardwareInspector('test-parent')
 
         // Flush all promises and timers
         await vi.advanceTimersByTimeAsync(0)

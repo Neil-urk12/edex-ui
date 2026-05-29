@@ -305,7 +305,7 @@ describe('FilesystemDisplay - no inline onclick handlers (security)', () => {
   });
 
   it('constructor does not set inline onclick on any child element', async () => {
-    const fsd = new FilesystemDisplay({ parentId: 'fs_parent3' });
+    new FilesystemDisplay({ parentId: 'fs_parent3' });
 
     // Check that the DOM created by constructor has no onclick attributes
     const container = document.getElementById('fs_parent3');
@@ -314,7 +314,7 @@ describe('FilesystemDisplay - no inline onclick handlers (security)', () => {
   });
 
   it('constructor creates fs_disp_container for file entries', async () => {
-    const fsd = new FilesystemDisplay({ parentId: 'fs_parent3' });
+    new FilesystemDisplay({ parentId: 'fs_parent3' });
     const filesContainer = document.getElementById('fs_disp_container');
     expect(filesContainer).toBeTruthy();
   });

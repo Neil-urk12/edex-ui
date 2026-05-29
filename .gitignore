@@ -42,3 +42,16 @@ jspm_packages
 dist
 prebuild-src
 src/node_modules
+
+# Environment
+.env
+
+# OS
+.DS_Store
+
+# Editors
+.vscode/
+*.swp
+
+# Build output
+out/

@@ -1,5 +1,5 @@
 import { app, BrowserWindow, ipcMain, shell, screen, clipboard, globalShortcut, dialog, protocol, net } from 'electron'
-import { join, dirname, isAbsolute, extname, basename } from 'path'
+import { join, dirname, extname, basename } from 'path'
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, lstatSync, watch } from 'fs'
 import { createHash } from 'crypto'
 import { fileURLToPath, pathToFileURL } from 'url'
@@ -21,7 +21,7 @@ process.on('uncaughtException', (e) => {
   // Ignore benign pipe errors during shutdown/cleanup
   if (e.code === 'EPIPE' || e.code === 'ERR_STREAM_DESTROYED') return
   console.error('FATAL:', e)
-  try { dialog.showErrorBox('eDEX-UI crashed', e.message || 'Cannot retrieve error message.') } catch (_) {}
+  try { dialog.showErrorBox('eDEX-UI crashed', e.message || 'Cannot retrieve error message.') } catch {}
   process.exit(1)
 })
 
@@ -52,7 +52,7 @@ delete process.env.https_proxy
 
 // --- Ensure userData dirs ---
 for (const dir of [userData, themesDir, kblayoutsDir, fontsDir]) {
-  try { mkdirSync(dir) } catch (_) {}
+  try { mkdirSync(dir) } catch {}
 }
 
 // --- Default settings ---
@@ -109,7 +109,7 @@ if (!existsSync(lastWindowStateFile)) {
 
 // --- Mirror assets to userData ---
 function mirrorAssets(srcDir, destDir) {
-  try { mkdirSync(destDir, { recursive: true }) } catch (_) {}
+  try { mkdirSync(destDir, { recursive: true }) } catch {}
   for (const file of readdirSync(srcDir)) {
     const src = join(srcDir, file)
     const dest = join(destDir, file)
@@ -138,7 +138,7 @@ for (const relPath of hashedAssets) {
 // --- Version history ---
 const versionHistoryPath = join(userData, 'versions_log.json')
 let versionHistory = {}
-try { versionHistory = JSON.parse(readFileSync(versionHistoryPath, 'utf-8')) } catch (_) {}
+try { versionHistory = JSON.parse(readFileSync(versionHistoryPath, 'utf-8')) } catch {}
 const version = app.getVersion()
 if (!versionHistory[version]) {
   versionHistory[version] = { firstSeen: Date.now(), lastSeen: Date.now() }
@@ -207,7 +207,7 @@ ipcMain.handle('registerShortcut', (_event, accelerator, id) => {
       if (win) win.webContents.send('shortcut-triggered', id)
     })
     return true
-  } catch (_) { return false }
+  } catch { return false }
 })
 
 ipcMain.handle('unregisterShortcut', (_event, accelerator) => {
@@ -240,7 +240,7 @@ ipcMain.handle('terminal:create', async (_event, options) => {
   let cleanEnv
   try {
     cleanEnv = await shellEnv(settings.shell)
-  } catch (_) {
+  } catch {
     cleanEnv = { ...process.env }
   }
   Object.assign(cleanEnv, {
@@ -284,7 +284,8 @@ ipcMain.handle('terminal:create', async (_event, options) => {
   // Sanitize params - reject shell metacharacters and dangerous flags
   const rawParams = options.params || settings.shellArgs || [];
   for (const p of rawParams) {
-    if (typeof p !== 'string' || /[;&|`$(){}!<>~\\\'\"\n\r\#\t\u0000]/.test(p)) {
+    // oxlint-disable-next-line no-control-regex — intentional for shell injection prevention
+    if (typeof p !== 'string' || /[;&|`$(){}!<>~'"\\]/u.test(p) || /\u000a|\u000d|\u0009|\u0000|#/u.test(p)) {
       throw new Error('Invalid shell parameter: contains forbidden characters');
     }
     if (/^-[a-zA-Z]*[cC]$|^\/[cC]$|^--command([= ]|$)/.test(p)) {
@@ -402,7 +403,15 @@ function createWindow(settings) {
 
   // Security: prevent new windows, restrict navigation
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url)
+    try {
+      const parsed = new URL(url);
+      const allowedSchemes = ['https:', 'http:', 'mailto:'];
+      if (allowedSchemes.includes(parsed.protocol)) {
+        shell.openExternal(url);
+      }
+    } catch {
+      // Invalid URL, ignore
+    }
     return { action: 'deny' }
   })
   mainWindow.webContents.on('will-navigate', (e, url) => {
@@ -436,12 +445,12 @@ app.whenReady().then(async () => {
     return net.fetch(pathToFileURL(resolved).href)
   })
   let settings = defaultSettings
-  try { settings = JSON.parse(readFileSync(settingsFile, 'utf-8')) } catch (_) {}
+  try { settings = JSON.parse(readFileSync(settingsFile, 'utf-8')) } catch {}
 
   // Resolve shell path
   try {
     settings.shell = await which(settings.shell)
-  } catch (_) {
+  } catch {
     settings.shell = process.platform === 'win32' ? 'powershell.exe' : '/bin/bash'
   }
 
@@ -450,7 +459,7 @@ app.whenReady().then(async () => {
   // Copy audio assets to userData (for howler.js access)
   const audioSrc = join(assetsBase, 'audio')
   const audioDest = join(userData, 'assets', 'audio')
-  try { mkdirSync(audioDest, { recursive: true }) } catch (_) {}
+  try { mkdirSync(audioDest, { recursive: true }) } catch {}
   if (existsSync(audioSrc)) {
     for (const file of readdirSync(audioSrc)) {
       writeFileSync(join(audioDest, file), readFileSync(join(audioSrc, file)))
@@ -460,7 +469,7 @@ app.whenReady().then(async () => {
   // Also copy boot_log.txt
   const miscSrc = join(assetsBase, 'misc')
   const miscDest = join(userData, 'assets', 'misc')
-  try { mkdirSync(miscDest, { recursive: true }) } catch (_) {}
+  try { mkdirSync(miscDest, { recursive: true }) } catch {}
   if (existsSync(join(miscSrc, 'boot_log.txt'))) {
     writeFileSync(join(miscDest, 'boot_log.txt'), readFileSync(join(miscSrc, 'boot_log.txt')))
   }
@@ -475,6 +484,6 @@ app.on('before-quit', () => {
   globalShortcut.unregisterAll()
   disposeFilesystemWatchers()
   for (const [, session] of terminals) {
-    try { session.kill() } catch (_) {}
+    try { session.kill() } catch {}
   }
 })

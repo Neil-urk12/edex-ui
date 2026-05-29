@@ -1154,7 +1154,7 @@ describe('Security: terminal:create shell validation', () => {
     await loadModule()
     const handler = getHandler('terminal:create')
     await expect(handler({}, { params: ['-c', 'rm -rf /'] }))
-      .rejects.toThrow(/Invalid shell parameter|\-c flag/)
+      .rejects.toThrow(/Invalid shell parameter|-c flag/)
   })
 
   it('rejects -C flag (uppercase) in params', async () => {
@@ -1164,7 +1164,7 @@ describe('Security: terminal:create shell validation', () => {
     await loadModule()
     const handler = getHandler('terminal:create')
     await expect(handler({}, { params: ['-C', 'echo hi'] }))
-      .rejects.toThrow(/Invalid shell parameter|\-c flag/)
+      .rejects.toThrow(/Invalid shell parameter|-c flag/)
   })
 
   it('rejects params with backslash characters', async () => {

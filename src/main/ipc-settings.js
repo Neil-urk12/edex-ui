@@ -9,7 +9,7 @@ const SETTINGS_ALLOWLIST = [
 export function register(ipcMain, { settingsFile, defaultSettings, userData, readFileSync, writeFileSync }) {
   ipcMain.handle('getSettings', () => {
     let settings
-    try { settings = JSON.parse(readFileSync(settingsFile, 'utf-8')) } catch (_) { settings = { ...defaultSettings } }
+    try { settings = JSON.parse(readFileSync(settingsFile, 'utf-8')) } catch { settings = { ...defaultSettings } }
     settings.settingsDir = userData
     settings.themesPath = join(userData, 'themes')
     settings.kbLayoutPath = join(userData, 'keyboards')
@@ -19,7 +19,7 @@ export function register(ipcMain, { settingsFile, defaultSettings, userData, rea
 
   ipcMain.handle('saveSettings', (_event, partial) => {
     let settings = { ...defaultSettings }
-    try { Object.assign(settings, JSON.parse(readFileSync(settingsFile, 'utf-8'))) } catch (_) {}
+    try { Object.assign(settings, JSON.parse(readFileSync(settingsFile, 'utf-8'))) } catch {}
     if (partial && typeof partial === 'object') {
       for (const key of SETTINGS_ALLOWLIST) {
         if (Object.hasOwn(partial, key)) settings[key] = partial[key]

@@ -150,7 +150,7 @@ class Terminal {
             let d = Date.now();
 
             if (d - this.lastSoundFX > 30) {
-                if (window.passwordMode == "false")
+                if (window.passwordMode === "false")
                     window.audioManager.stdout.play();
                 this.lastSoundFX = d;
             }
@@ -170,7 +170,7 @@ class Terminal {
         });
         if (unsubData) this._unsubs.push(unsubData);
 
-        let unsubExit = window.electronAPI.onTerminalExit((id, exitCode, signal) => {
+        let unsubExit = window.electronAPI.onTerminalExit((id, _exitCode, _signal) => {
             if (id !== this.id) return;
             if (this.onclose) {
                 this.onclose();
@@ -248,7 +248,7 @@ class Terminal {
             let y = 0;
 
             function gcd(a, b) {
-                return (b == 0) ? a : gcd(b, a%b);
+                return (b === 0) ? a : gcd(b, a%b);
             }
             let d = gcd(w, h);
 

@@ -580,7 +580,7 @@ describe('Modal', () => {
 
     describe('[RED] isFocused property', () => {
         it('is true for the last created modal', () => {
-            const modal1 = new Modal({ type: 'info' });
+            new Modal({ type: 'info' }); // create first modal
             const modal2 = new Modal({ type: 'warning' });
             expect(modal2.isFocused).toBe(true);
         });
@@ -828,6 +828,7 @@ describe('Button actions use action map instead of new Function', () => {
         // PANIC should close via action map
         panicBtn.click();
         expect(el.className).toContain('blink');
+    });
 });
 
 describe('Custom modal HTML sanitization', () => {

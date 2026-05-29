@@ -63,7 +63,7 @@ export class TerminalSession {
     if (!this._closed && this._pty) {
       try {
         this._pty.resize(cols, rows)
-      } catch (_) {
+      } catch {
         // ignore resize errors on dead PTY
       }
     }
@@ -115,6 +115,9 @@ export class TerminalSession {
 
   _getCWD() {
     const pid = this._pty.pid
+    if (!Number.isInteger(pid) || pid <= 0) {
+      return Promise.reject(new Error('Invalid PID'));
+    }
     const osType = platform()
 
     return new Promise((resolve, reject) => {
@@ -141,6 +144,9 @@ export class TerminalSession {
 
   _getProcess() {
     const pid = this._pty.pid
+    if (!Number.isInteger(pid) || pid <= 0) {
+      return Promise.resolve('unknown');
+    }
     const osType = platform()
 
     return new Promise((resolve, reject) => {

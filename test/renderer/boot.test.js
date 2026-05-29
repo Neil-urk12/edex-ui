@@ -2,6 +2,21 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { loadBootLog, displayTitleScreen, waitForFonts } from '../../src/renderer/boot.js';
 
+// Helper: mock document.fonts for jsdom (FontFaceSet doesn't support defineProperty)
+function mockDocumentFonts(status = 'loaded') {
+    const fonts = {
+        status,
+        onloadingdone: null,
+        ready: Promise.resolve(),
+    };
+    Object.defineProperty(document, 'fonts', {
+        value: fonts,
+        configurable: true,
+        writable: true,
+    });
+    return fonts;
+}
+
 describe('boot.js', () => {
     let mockElectronAPI;
     let mockAudioManager;
@@ -91,10 +106,7 @@ describe('boot.js', () => {
         it('resolves immediately when document.fonts.status is already loaded', async () => {
             // In jsdom, document.fonts may not have .status.
             // Stub it to simulate the loaded state.
-            Object.defineProperty(document.fonts, 'status', {
-                value: 'loaded',
-                configurable: true,
-            });
+            mockDocumentFonts('loaded');
             Object.defineProperty(document, 'readyState', {
                 value: 'complete',
                 configurable: true,
@@ -107,10 +119,7 @@ describe('boot.js', () => {
         });
 
         it('resolves when document.fonts transitions to loaded', async () => {
-            Object.defineProperty(document.fonts, 'status', {
-                value: 'loading',
-                configurable: true,
-            });
+            const fonts = mockDocumentFonts('loading');
             Object.defineProperty(document, 'readyState', {
                 value: 'complete',
                 configurable: true,
@@ -119,24 +128,17 @@ describe('boot.js', () => {
             const promise = waitForFonts();
 
             // Simulate the font loading completing
-            Object.defineProperty(document.fonts, 'status', {
-                value: 'loaded',
-                configurable: true,
-            });
+            fonts.status = 'loaded';
             // Fire the onloadingdone callback if waitForFonts set one
             if (document.fonts.onloadingdone) {
                 document.fonts.onloadingdone();
             }
 
-            await vi.runAllTimersAsync();
             await expect(promise).resolves.toBeUndefined();
         });
 
         it('resolves when readystatechange fires and fonts are loaded', async () => {
-            Object.defineProperty(document.fonts, 'status', {
-                value: 'loading',
-                configurable: true,
-            });
+            mockDocumentFonts('loaded');
             Object.defineProperty(document, 'readyState', {
                 value: 'loading',
                 configurable: true,
@@ -149,10 +151,7 @@ describe('boot.js', () => {
                 value: 'complete',
                 configurable: true,
             });
-            Object.defineProperty(document.fonts, 'status', {
-                value: 'loaded',
-                configurable: true,
-            });
+            mockDocumentFonts('loaded');
             document.dispatchEvent(new Event('readystatechange'));
 
             await vi.runAllTimersAsync();
@@ -169,10 +168,7 @@ describe('boot.js', () => {
             window.theme = { r: '0', g: '255', b: '255' };
 
             // Stub waitForFonts internals: readyState + fonts.status
-            Object.defineProperty(document.fonts, 'status', {
-                value: 'loaded',
-                configurable: true,
-            });
+            mockDocumentFonts('loaded');
             Object.defineProperty(document, 'readyState', {
                 value: 'complete',
                 configurable: true,
@@ -295,6 +291,81 @@ describe('boot.js', () => {
             expect(document.getElementById('boot_screen')).toBeNull();
             // onInitUI should NOT be called on the skip path
             expect(onInitUI).not.toHaveBeenCalled();
+        });
+
+        it('sanitizes non-numeric theme colors to safe fallback', async () => {
+            const onInitUI = vi.fn();
+            const promise = displayTitleScreen({
+                theme: { r: 'abc', g: '0', b: '0' },
+                onInitUI,
+            });
+
+            // Flush waitForFonts microtask so h1 gets created
+            await vi.advanceTimersByTimeAsync(0);
+
+            const h1 = document.querySelector('#boot_screen h1');
+            expect(h1).toBeTruthy();
+            // Should NOT contain 'rgb(abc,0,0)' — must use numeric fallback
+            expect(h1.style.borderBottom).not.toContain('abc');
+            expect(h1.style.borderBottom).toMatch(/rgb\(\d+, \d+, \d+\)/);
+
+            // Let animation complete
+            await vi.advanceTimersByTimeAsync(100);
+            await promise;
+        });
+
+        it('clamps theme colors above 255', async () => {
+            const onInitUI = vi.fn();
+            const promise = displayTitleScreen({
+                theme: { r: '999', g: '0', b: '0' },
+                onInitUI,
+            });
+
+            await vi.advanceTimersByTimeAsync(0);
+
+            const h1 = document.querySelector('#boot_screen h1');
+            expect(h1).toBeTruthy();
+            // r=999 should be clamped to 255
+            expect(h1.style.borderBottom).toContain('rgb(255, 0, 0)');
+
+            await vi.advanceTimersByTimeAsync(100);
+            await promise;
+        });
+
+        it('clamps negative theme colors to 0', async () => {
+            const onInitUI = vi.fn();
+            const promise = displayTitleScreen({
+                theme: { r: '-10', g: '0', b: '0' },
+                onInitUI,
+            });
+
+            await vi.advanceTimersByTimeAsync(0);
+
+            const h1 = document.querySelector('#boot_screen h1');
+            expect(h1).toBeTruthy();
+            // r=-10 should be clamped to 0
+            expect(h1.style.borderBottom).toContain('rgb(0, 0, 0)');
+
+            await vi.advanceTimersByTimeAsync(100);
+            await promise;
+        });
+
+        it('handles missing theme color properties gracefully', async () => {
+            const onInitUI = vi.fn();
+            const promise = displayTitleScreen({
+                theme: { r: '128' },
+                onInitUI,
+            });
+
+            await vi.advanceTimersByTimeAsync(0);
+
+            const h1 = document.querySelector('#boot_screen h1');
+            expect(h1).toBeTruthy();
+            // Missing g and b should default to 0
+            expect(h1.style.borderBottom).toContain('rgb(128, 0, 0)');
+
+            await vi.advanceTimersByTimeAsync(100);
+            await promise;
         });
     });
 });

@@ -7,7 +7,9 @@ import { describe, it, expect } from 'vitest'
 // ============================================================
 
 // Regex from index.js line 413 (FIXED: includes \t and \0)
-const METACHAR_REGEX = /[;&|`$(){}!<>~\\\'\"\n\r#\t\u0000]/
+const METACHAR_REGEX = /[;&|`$(){}!<>~'"\\]/u
+// oxlint-disable-next-line no-control-regex
+const CONTROL_REGEX = /\u000a|\u000d|\u0009|\u0000|#/u
 
 // Dangerous-flag check from index.js line 416 (FIXED)
 const DANGEROUS_FLAG_REGEX = /^-[a-zA-Z]*[cC]$|^\/[cC]$|^--command([= ]|$)/
@@ -55,23 +57,23 @@ describe('Shell parameter sanitization', () => {
     })
 
     it('rejects newline', () => {
-      expect(METACHAR_REGEX.test('arg\nmalicious')).toBe(true)
+      expect(CONTROL_REGEX.test('arg\nmalicious')).toBe(true)
     })
 
     it('rejects carriage return', () => {
-      expect(METACHAR_REGEX.test('arg\rmalicious')).toBe(true)
+      expect(CONTROL_REGEX.test('arg\rmalicious')).toBe(true)
     })
 
     it('rejects tab', () => {
-      expect(METACHAR_REGEX.test('arg\tmalicious')).toBe(true)
+      expect(CONTROL_REGEX.test('arg\tmalicious')).toBe(true)
     })
 
     it('rejects null byte', () => {
-      expect(METACHAR_REGEX.test('arg\u0000malicious')).toBe(true)
+      expect(CONTROL_REGEX.test('arg\u0000malicious')).toBe(true)
     })
 
     it('rejects hash', () => {
-      expect(METACHAR_REGEX.test('foo#comment')).toBe(true)
+      expect(CONTROL_REGEX.test('foo#comment')).toBe(true)
     })
 
     it('rejects exclamation mark', () => {

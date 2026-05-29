@@ -21,7 +21,7 @@ class FilesystemDisplay {
         this.cwd = [];
         this.cwd_path = null;
         this.iconcolor = `rgb(${window.theme.r}, ${window.theme.g}, ${window.theme.b})`;
-        this._formatBytes = (a, b) => { if (0 == a) return "0 Bytes"; var c = 1024, d = b || 2, e = ["Bytes", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"], f = Math.floor(Math.log(a) / Math.log(c)); return parseFloat((a / Math.pow(c, f)).toFixed(d)) + " " + e[f] };
+        this._formatBytes = (a, b) => { if (0 === a) return "0 Bytes"; var c = 1024, d = b || 2, e = ["Bytes", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"], f = Math.floor(Math.log(a) / Math.log(c)); return parseFloat((a / Math.pow(c, f)).toFixed(d)) + " " + e[f] };
 
         // file-icons-match and icons loaded dynamically
         this.fileIconsMatcher = null;
@@ -210,7 +210,7 @@ class FilesystemDisplay {
                         let fstat;
                         try {
                             fstat = await window.electronAPI.stat(pathJoin(tcwd, file));
-                        } catch (e) {
+                        } catch {
                             return null; // skip entry on stat failure
                         }
 
@@ -222,7 +222,7 @@ class FilesystemDisplay {
                             hidden: false
                         };
 
-                        if (fstat != null) {
+                        if (fstat !== null) {
                             e.lastAccessed = fstat.mtime ? new Date(fstat.mtime).getTime() : 0;
 
                             if (fstat.isDirectory) {
@@ -263,7 +263,7 @@ class FilesystemDisplay {
                     for (const entry of entries) {
                         if (entry) this.cwd.push(entry);
                     }
-                } catch (e) {
+                } catch {
                     this.setFailedState();
                     this._reading = false;
                     return;
@@ -318,7 +318,7 @@ class FilesystemDisplay {
                 try {
                     await window.electronAPI.stat(block.mount);
                     accessible = true;
-                } catch (e) { /* not accessible */ }
+                } catch { /* not accessible */ }
 
                 if (accessible) {
                     let type = (block.type === "rom") ? "rom" : "disk";
@@ -353,7 +353,6 @@ class FilesystemDisplay {
                 document.querySelector("section#filesystem > h3.title > p:first-of-type").innerText = "FILESYSTEM - TRACKING FAILED, RUNNING DETACHED FROM TTY";
             }
 
-            const isWin = navigator.platform.includes('Win');
 
             let filesDOM = ``;
             blockList.forEach((e, blockIndex) => {
@@ -454,7 +453,7 @@ class FilesystemDisplay {
                                 <svg viewBox="0 0 ${icon.width} ${icon.height}" fill="${this.iconcolor}">
                                     ${icon.svg}
                                 </svg>
-                                <h3>${e.name}</h3>
+                                <h3>${escapeHtml(e.name)}</h3>
                                 <h4>${type}</h4>
                                 <h4>${e.size}</h4>
                                 <h4>${e.lastAccessed}</h4>
@@ -497,7 +496,7 @@ class FilesystemDisplay {
             let d;
             try {
                 d = await window.electronAPI.getFsSize();
-            } catch (e) {
+            } catch {
                 this.space_bar.text.innerHTML = "Could not calculate mountpoint usage.";
                 this.space_bar.bar.value = 100;
                 return;
@@ -536,7 +535,7 @@ class FilesystemDisplay {
             this.readFS(window.settings.cwd || '/');
         }
 
-        this.openFile = async (name, path, type) => {
+        this.openFile = async (name, _path, _type) => {
             let block;
 
             if (typeof name === "number") {
@@ -550,7 +549,7 @@ class FilesystemDisplay {
             try {
                 const { lookup } = await import('mime-types');
                 filetype = lookup(name.split(".").pop()) || 'application/octet-stream';
-            } catch (e) {
+            } catch {
                 // mime-types not available, fallback
             }
 

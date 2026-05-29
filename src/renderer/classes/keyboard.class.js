@@ -139,7 +139,7 @@ export class Keyboard {
                         });
 
                         if (window.keyboard.linkedToTerm && window.term[window.currentTerm]) window.term[window.currentTerm].term.focus();
-                        if (this.container.dataset.passwordMode == "false")
+                        if (this.container.dataset.passwordMode === "false")
                             window.audioManager.granted.play();
                         e.preventDefault();
                     };
@@ -179,11 +179,11 @@ export class Keyboard {
                         }
 
                         if (window.keyboard.linkedToTerm && window.term[window.currentTerm]) window.term[window.currentTerm].term.focus();
-                        if (this.container.dataset.passwordMode == "false")
+                        if (this.container.dataset.passwordMode === "false")
                             window.audioManager.stdin.play();
                         e.preventDefault();
                     };
-                    key.onmouseup = e => {
+                    key.onmouseup = _e => {
                         if (/^ESCAPED\|-- (CTRL|SHIFT|ALT){1}.*/.test(key.dataset.cmd)) {
                             let cmd = key.dataset.cmd.substr(11);
                             if (cmd.startsWith("CTRL")) {
@@ -256,7 +256,7 @@ export class Keyboard {
         // Bind actual keyboard actions to on-screen animations
         let findKey = e => {
             let physkey;
-            (e.key === "\"") ? physkey = `\\"` : physkey = e.key;
+            physkey = (e.key === "\"") ? `\\"` : e.key;
 
             let key = document.querySelector('div.keyboard_key[data-cmd="' + physkey + '"]');
             if (key === null) key = document.querySelector('div.keyboard_key[data-shift_cmd="' + physkey + '"]');
@@ -304,7 +304,7 @@ export class Keyboard {
             }
 
             if (e.repeat === false || (e.repeat === true && !e.code.startsWith('Shift') && !e.code.startsWith('Alt') && !e.code.startsWith('Control') && !e.code.startsWith('Caps'))) {
-                if (this.container.dataset.passwordMode == "false")
+                if (this.container.dataset.passwordMode === "false")
                     window.audioManager.stdin.play();
             }
         };
@@ -336,7 +336,7 @@ export class Keyboard {
                 }, 100);
             }
 
-            if (this.container.dataset.passwordMode == "false" && e.key === "Enter")
+            if (this.container.dataset.passwordMode === "false" && e.key === "Enter")
                 window.audioManager.granted.play();
         };
 
@@ -547,7 +547,7 @@ export class Keyboard {
 
     togglePasswordMode() {
         let d = this.container.dataset.passwordMode;
-        (d === "true") ? d = "false" : d = "true";
+        d = (d === "true") ? "false" : "true";
         this.container.dataset.passwordMode = d;
         window.passwordMode = d;
         return d;

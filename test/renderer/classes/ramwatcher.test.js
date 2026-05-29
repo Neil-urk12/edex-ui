@@ -37,13 +37,13 @@ describe('RAMwatcher', () => {
         });
 
         it('creates DOM container with id "mod_ramwatcher"', () => {
-            const rw = new RAMwatcher('test-parent');
+            new RAMwatcher('test-parent');
             const container = document.getElementById('mod_ramwatcher');
             expect(container).toBeTruthy();
         });
 
         it('calls getMemoryInfo on init', async () => {
-            const rw = new RAMwatcher('test-parent');
+            new RAMwatcher('test-parent');
             await vi.advanceTimersByTimeAsync(0);
             expect(mockElectronAPI.getMemoryInfo).toHaveBeenCalled();
         });
@@ -69,7 +69,7 @@ describe('RAMwatcher', () => {
                     swapused: 1000000000
                 });
 
-            const rw = new RAMwatcher('test-parent');
+            new RAMwatcher('test-parent');
             await vi.advanceTimersByTimeAsync(0); // let first call reject
 
             // Advance past the 1500ms polling interval

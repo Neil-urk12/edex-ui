@@ -55,13 +55,13 @@ export function register(ipcMain, { userData, readdirSync, lstatSync, readFileSy
         if (win) win.webContents.send('fs-changed', 'change')
       })
       fsWatchers[resolved] = watcher
-    } catch (_) {}
+    } catch {}
   })
 }
 
 export function dispose() {
   for (const watcher of Object.values(fsWatchers)) {
-    try { watcher.close() } catch (_) {}
+    try { watcher.close() } catch {}
   }
   fsWatchers = {}
 }

@@ -30,7 +30,7 @@ describe('Sysinfo', () => {
         });
 
         it('creates DOM container with id "mod_sysinfo"', () => {
-            const sysinfo = new Sysinfo('test-parent');
+            new Sysinfo('test-parent');
             const container = document.getElementById('mod_sysinfo');
             expect(container).toBeTruthy();
         });
@@ -39,7 +39,7 @@ describe('Sysinfo', () => {
     describe('error handling', () => {
         it('does not throw when getSystemUptime rejects', async () => {
             mockElectronAPI.getSystemUptime.mockRejectedValue(new Error('IPC failed'));
-            const sysinfo = new Sysinfo('test-parent');
+            new Sysinfo('test-parent');
 
             // Trigger updateUptime via interval
             vi.advanceTimersByTime(60000);
@@ -53,7 +53,7 @@ describe('Sysinfo', () => {
             delete mockElectronAPI.getSystemUptime;
             window.electronAPI = mockElectronAPI;
 
-            const sysinfo = new Sysinfo('test-parent');
+            new Sysinfo('test-parent');
 
             // updateUptime is called in constructor, should use performance.now() fallback
             const uptimeEl = document.querySelector('#mod_sysinfo > div:nth-child(2) > h2');
