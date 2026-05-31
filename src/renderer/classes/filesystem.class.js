@@ -1,4 +1,5 @@
 import { escapeHtml, encodePathURI, delay } from '../utils.js';
+import { POLL_INTERVALS } from '../constants.js';
 
 // Path helpers (no require("path") in renderer)
 const pathJoin = (...parts) => parts.join('/').replace(/\/+/g, '/');
@@ -82,7 +83,7 @@ class FilesystemDisplay {
                 this._runNextTick = false;
                 this.readFS(this.dirpath).catch(err => console.warn('Timer readFS failed:', err)); // defensive: readFS handles errors internally
             }
-        }, 1000);
+        }, POLL_INTERVALS.FILESYSTEM);
 
         this._fsWatcherUnsub = null;
 
@@ -182,7 +183,7 @@ class FilesystemDisplay {
                         this._retryTimeout = null;
                         if (this._disposed) return;
                         this.readFS(this.dirpath).catch(err => console.warn('Retry readFS failed:', err));
-                    }, 1000);
+                    }, POLL_INTERVALS.FILESYSTEM_RETRY);
                 } else {
                     this.setFailedState();
                 }

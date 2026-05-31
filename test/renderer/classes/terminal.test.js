@@ -49,12 +49,19 @@ vi.mock('xterm-addon-webgl', () => ({
 }));
 
 vi.mock('color', () => {
+    const filterMethods = [
+        'negate', 'grayscale', 'lighten', 'darken',
+        'saturate', 'desaturate', 'whiten', 'blacken',
+        'fade', 'opaquer', 'rotate'
+    ];
     const chainable = () => {
         const c = {
-            grayscale: vi.fn().mockReturnThis(),
             mix: vi.fn().mockReturnThis(),
             hex: vi.fn().mockReturnValue('#888888'),
         };
+        for (const m of filterMethods) {
+            c[m] = vi.fn().mockReturnThis();
+        }
         return c;
     };
     return { default: vi.fn().mockReturnValue(chainable()) };
@@ -410,6 +417,258 @@ describe('Terminal', () => {
             mockElectronAPI._exitCallback(1, 0, null);
 
             expect(closeCallback).toHaveBeenCalled();
+        });
+
+        it('plays stdout sound when passwordMode is string "false"', () => {
+            window.passwordMode = "false";
+            // Create a Terminal and get the onTerminalData callback that was registered
+            const term = new Terminal({ id: 0, parentId: 'test-parent' });
+            const dataCallback = mockElectronAPI.onTerminalData.mock.calls[
+                mockElectronAPI.onTerminalData.mock.calls.length - 1
+            ][0];
+            // Reset throttle
+            term.lastSoundFX = 0;
+            dataCallback(0, 'some output');
+            expect(window.audioManager.stdout.play).toHaveBeenCalled();
+        });
+
+        it('plays stdout sound when passwordMode is undefined (default)', () => {
+            window.passwordMode = undefined;
+            const term = new Terminal({ id: 0, parentId: 'test-parent' });
+            const dataCallback = mockElectronAPI.onTerminalData.mock.calls[
+                mockElectronAPI.onTerminalData.mock.calls.length - 1
+            ][0];
+            term.lastSoundFX = 0;
+            dataCallback(0, 'some output');
+            expect(window.audioManager.stdout.play).toHaveBeenCalled();
+        });
+
+        it('does NOT play stdout sound when passwordMode is string "true"', () => {
+            window.passwordMode = "true";
+            const term = new Terminal({ id: 0, parentId: 'test-parent' });
+            const dataCallback = mockElectronAPI.onTerminalData.mock.calls[
+                mockElectronAPI.onTerminalData.mock.calls.length - 1
+            ][0];
+            term.lastSoundFX = 0;
+            dataCallback(0, 'some output');
+            expect(window.audioManager.stdout.play).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('fit', () => {
+        it('calls proposeDimensions and uses result', () => {
+            mockFitAddonInstance.proposeDimensions.mockReturnValue({ cols: 100, rows: 50 });
+            // Screen 1920x1080 -> GCD=120, no correction. Default x=1, y=0. cols=100+1=101, rows=50+0=50
+            Object.defineProperty(window, 'screen', { value: { width: 1920, height: 1080 }, writable: true, configurable: true });
+            const term = new Terminal({ id: 0, parentId: 'test-parent' });
+            mockTerminalInstance.resize.mockClear();
+            term.fit();
+            expect(mockFitAddonInstance.proposeDimensions).toHaveBeenCalled();
+            expect(mockTerminalInstance.resize).toHaveBeenCalledWith(101, 50);
+        });
+
+        it('applies GCD 100 correction: y=1, x=3', () => {
+            mockFitAddonInstance.proposeDimensions.mockReturnValue({ cols: 80, rows: 24 });
+            // 1600x900 -> GCD=100 -> x=3, y=1; fontSize=15. cols=80+3=83, rows=24+1=25
+            Object.defineProperty(window, 'screen', { value: { width: 1600, height: 900 }, writable: true, configurable: true });
+            const term = new Terminal({ id: 0, parentId: 'test-parent' });
+            mockTerminalInstance.resize.mockClear();
+            term.fit();
+            expect(mockTerminalInstance.resize).toHaveBeenCalledWith(83, 25);
+        });
+
+        it('applies GCD 256 correction: x=2', () => {
+            mockFitAddonInstance.proposeDimensions.mockReturnValue({ cols: 80, rows: 24 });
+            // 1280x768 -> GCD=256 -> x=2, y=0; fontSize=15. cols=80+2=82, rows=24+0=24
+            Object.defineProperty(window, 'screen', { value: { width: 1280, height: 768 }, writable: true, configurable: true });
+            const term = new Terminal({ id: 0, parentId: 'test-parent' });
+            mockTerminalInstance.resize.mockClear();
+            term.fit();
+            expect(mockTerminalInstance.resize).toHaveBeenCalledWith(82, 24);
+        });
+
+        it('decrements y when termFontSize < 15', () => {
+            mockFitAddonInstance.proposeDimensions.mockReturnValue({ cols: 80, rows: 24 });
+            // 1600x900 -> GCD=100 -> x=3, y=1; fontSize=10 -> y=1-1=0. cols=83, rows=24
+            Object.defineProperty(window, 'screen', { value: { width: 1600, height: 900 }, writable: true, configurable: true });
+            window.settings.termFontSize = 10;
+            const term = new Terminal({ id: 0, parentId: 'test-parent' });
+            mockTerminalInstance.resize.mockClear();
+            term.fit();
+            expect(mockTerminalInstance.resize).toHaveBeenCalledWith(83, 24);
+        });
+
+        it('skips resize when cols and rows are unchanged', () => {
+            mockFitAddonInstance.proposeDimensions.mockReturnValue({ cols: 80, rows: 24 });
+            // Screen 1920x1080 -> GCD=120, x=1, y=0. cols=81, rows=24.
+            // Set mock terminal to already have those dimensions so resize is skipped.
+            Object.defineProperty(window, 'screen', { value: { width: 1920, height: 1080 }, writable: true, configurable: true });
+            const term = new Terminal({ id: 0, parentId: 'test-parent' });
+            mockTerminalInstance.cols = 81;
+            mockTerminalInstance.rows = 24;
+            mockTerminalInstance.resize.mockClear();
+            term.fit();
+            expect(mockTerminalInstance.resize).not.toHaveBeenCalled();
+        });
+
+        it('updates lastRefit timestamp', () => {
+            mockFitAddonInstance.proposeDimensions.mockReturnValue({ cols: 80, rows: 24 });
+            Object.defineProperty(window, 'screen', { value: { width: 1920, height: 1080 }, writable: true, configurable: true });
+            const term = new Terminal({ id: 0, parentId: 'test-parent' });
+            mockTerminalInstance.resize.mockClear();
+            const before = Date.now();
+            term.fit();
+            const after = Date.now();
+            expect(term.lastRefit).toBeGreaterThanOrEqual(before);
+            expect(term.lastRefit).toBeLessThanOrEqual(after);
+        });
+    });
+
+    describe('color filter', () => {
+        describe('valid filter parsing', () => {
+            it('parses negate filter and sets isTermFilterValidated', () => {
+                window.theme.terminal.colorFilter = ['negate'];
+                new Terminal({ id: 0, parentId: 'test-parent' });
+                expect(window.isTermFilterValidated).toBe(true);
+                // Parsed in-place: string replaced with {func, arg}
+                expect(window.theme.terminal.colorFilter[0]).toEqual({ func: 'negate', arg: [] });
+            });
+
+            it('parses grayscale filter (no-arg)', () => {
+                window.theme.terminal.colorFilter = ['grayscale'];
+                new Terminal({ id: 0, parentId: 'test-parent' });
+                expect(window.theme.terminal.colorFilter[0]).toEqual({ func: 'grayscale', arg: [] });
+            });
+
+            it.each([
+                'lighten', 'darken', 'saturate', 'desaturate',
+                'whiten', 'blacken', 'fade', 'opaquer', 'rotate', 'mix'
+            ])('parses %s filter with numeric arg', (fn) => {
+                window.theme.terminal.colorFilter = [`${fn}(0.5)`];
+                new Terminal({ id: 0, parentId: 'test-parent' });
+                expect(window.theme.terminal.colorFilter[0]).toEqual({ func: fn, arg: [0.5] });
+                expect(window.isTermFilterValidated).toBe(true);
+            });
+
+            it('parses multiple filters in sequence', () => {
+                window.theme.terminal.colorFilter = ['lighten(0.2)', 'saturate(0.8)', 'mix(0.5)'];
+                new Terminal({ id: 0, parentId: 'test-parent' });
+                expect(window.theme.terminal.colorFilter[0]).toEqual({ func: 'lighten', arg: [0.2] });
+                expect(window.theme.terminal.colorFilter[1]).toEqual({ func: 'saturate', arg: [0.8] });
+                expect(window.theme.terminal.colorFilter[2]).toEqual({ func: 'mix', arg: [0.5] });
+            });
+        });
+
+        describe('invalid filter rejection', () => {
+            it('rejects unknown filter function name', () => {
+                window.theme.terminal.colorFilter = ['invalidFunc(0.5)'];
+                new Terminal({ id: 0, parentId: 'test-parent' });
+                // doCustomFilter = false, falls back to default
+                // isTermFilterValidated should NOT be set
+                expect(window.isTermFilterValidated).toBeUndefined();
+            });
+
+            it('rejects filters with non-numeric arg', () => {
+                window.theme.terminal.colorFilter = ['lighten(abc)'];
+                new Terminal({ id: 0, parentId: 'test-parent' });
+                // Number('abc') is NaN, typeof NaN === 'number' is true
+                // This is a bug — NaN should NOT pass the typeof check
+                // Correct behavior: validation should fail
+                expect(window.isTermFilterValidated).toBeUndefined();
+                // Filter should NOT be parsed into an object
+                expect(window.theme.terminal.colorFilter[0]).toBe('lighten(abc)');
+            });
+
+            it('rejects filters with NaN-producing arg', () => {
+                window.theme.terminal.colorFilter = ['lighten(abc)'];
+                new Terminal({ id: 0, parentId: 'test-parent' });
+                expect(window.isTermFilterValidated).toBeUndefined();
+            });
+
+            it('one invalid filter in sequence invalidates all (every() short-circuits)', () => {
+                window.theme.terminal.colorFilter = ['lighten(0.2)', 'bogus(0.5)'];
+                new Terminal({ id: 0, parentId: 'test-parent' });
+                // First filter parsed, second fails → every returns false
+                // doCustomFilter = false, default fallback used
+                expect(window.isTermFilterValidated).toBeUndefined();
+            });
+
+            it('rejects filter with Infinity arg', () => {
+                window.theme.terminal.colorFilter = ['lighten(Infinity)'];
+                new Terminal({ id: 0, parentId: 'test-parent' });
+                expect(window.isTermFilterValidated).toBeUndefined();
+            });
+
+            it('accepts filter with negative numeric arg', () => {
+                window.theme.terminal.colorFilter = ['lighten(-0.5)'];
+                new Terminal({ id: 0, parentId: 'test-parent' });
+                expect(window.isTermFilterValidated).toBe(true);
+                expect(window.theme.terminal.colorFilter[0]).toEqual({ func: 'lighten', arg: [-0.5] });
+            });
+
+            it('accepts filter with zero arg', () => {
+                window.theme.terminal.colorFilter = ['lighten(0)'];
+                new Terminal({ id: 0, parentId: 'test-parent' });
+                expect(window.isTermFilterValidated).toBe(true);
+                expect(window.theme.terminal.colorFilter[0]).toEqual({ func: 'lighten', arg: [0] });
+            });
+
+            it('parses no-paren filter correctly (negate)', () => {
+                window.theme.terminal.colorFilter = ['negate'];
+                new Terminal({ id: 0, parentId: 'test-parent' });
+                expect(window.isTermFilterValidated).toBe(true);
+                expect(window.theme.terminal.colorFilter[0]).toEqual({ func: 'negate', arg: [] });
+            });
+        });
+
+        describe('caching via window.isTermFilterValidated', () => {
+            it('skips re-validation when isTermFilterValidated is already true', () => {
+                window.theme.terminal.colorFilter = ['lighten(0.2)'];
+                window.isTermFilterValidated = true;
+                // Manually set the expected parsed form (simulating previous validation)
+                window.theme.terminal.colorFilter[0] = { func: 'lighten', arg: [0.2] };
+
+                const everySpy = vi.spyOn(window.theme.terminal.colorFilter, 'every');
+                new Terminal({ id: 0, parentId: 'test-parent' });
+                // every() should NOT be called — cached
+                expect(everySpy).not.toHaveBeenCalled();
+            });
+        });
+
+        describe('default fallback (no custom filter)', () => {
+            it('uses grayscale+mix(0.3) when no colorFilter set', () => {
+                // No colorFilter in theme
+                const term = new Terminal({ id: 0, parentId: 'test-parent' });
+                // Default colorify: Color(base).grayscale().mix(Color(target), 0.3).hex()
+                // Verify via xterm theme — all colors should be '#888888' from mock
+                const xtermOpts = XtermTerminal.mock.calls[0][0];
+                expect(xtermOpts.theme.black).toBe('#888888');
+                expect(xtermOpts.theme.red).toBe('#888888');
+            });
+
+            it('uses grayscale+mix(0.3) when colorFilter is empty array', () => {
+                window.theme.terminal.colorFilter = [];
+                new Terminal({ id: 0, parentId: 'test-parent' });
+                const xtermOpts = XtermTerminal.mock.calls[0][0];
+                expect(xtermOpts.theme.black).toBe('#888888');
+            });
+
+            it('uses grayscale+mix(0.3) when colorFilter validation fails', () => {
+                window.theme.terminal.colorFilter = ['bogus(1)'];
+                new Terminal({ id: 0, parentId: 'test-parent' });
+                const xtermOpts = XtermTerminal.mock.calls[0][0];
+                expect(xtermOpts.theme.black).toBe('#888888');
+            });
+
+            it('calls colorify 16 times for all terminal colors', async () => {
+                const Color = (await import('color')).default;
+                new Terminal({ id: 0, parentId: 'test-parent' });
+                // 16 terminal colors: black, red, green, yellow, blue, magenta, cyan, white,
+                // brightBlack, brightRed, brightGreen, brightYellow, brightBlue, brightMagenta,
+                // brightCyan, brightWhite
+                // Each calls Color() twice (base + target in .mix())
+                expect(Color).toHaveBeenCalledTimes(32);
+            });
         });
     });
 });

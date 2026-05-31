@@ -3,6 +3,7 @@ import { FitAddon } from 'xterm-addon-fit';
 // LigaturesAddon removed — requires Node.js APIs (util, fs) unavailable in browser context
 import { WebglAddon } from 'xterm-addon-webgl';
 import Color from 'color';
+import { THROTTLE } from '../constants.js';
 
 class Terminal {
     constructor(opts) {
@@ -21,7 +22,7 @@ class Terminal {
         // Parse & validate color filter
         if (window.isTermFilterValidated !== true && typeof window.theme.terminal.colorFilter === "object" && window.theme.terminal.colorFilter.length > 0) {
             doCustomFilter = window.theme.terminal.colorFilter.every((step, i, a) => {
-                let func = step.slice(0, step.indexOf("("));
+                let func = step.indexOf("(") === -1 ? step : step.slice(0, step.indexOf("("));
 
                 switch(func) {
                     case "negate":
@@ -48,17 +49,19 @@ class Terminal {
 
                 let arg = step.slice(step.indexOf("(")+1, step.indexOf(")"));
 
-                if (typeof Number(arg) === "number") {
+                if (Number.isFinite(Number(arg))) {
                     a[i] = {
                         func,
                         arg: [Number(arg)]
                     };
-                    window.isTermFilterValidated = true;
                     return true;
                 }
 
                 return false;
             });
+            if (doCustomFilter) {
+                window.isTermFilterValidated = true;
+            }
         }
 
         let colorify;
@@ -149,12 +152,12 @@ class Terminal {
 
             let d = Date.now();
 
-            if (d - this.lastSoundFX > 30) {
-                if (window.passwordMode === "false")
+            if (d - this.lastSoundFX > THROTTLE.SOUND_FX) {
+                if (window.passwordMode !== "true")
                     window.audioManager.stdout.play();
                 this.lastSoundFX = d;
             }
-            if (d - this.lastRefit > 10000) {
+            if (d - this.lastRefit > THROTTLE.TERMINAL_REFIT) {
                 this.fit();
             }
 

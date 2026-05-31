@@ -1,4 +1,5 @@
 // eDEX-UI Cpuinfo Module
+import { POLL_INTERVALS } from '../constants.js';
 export class Cpuinfo {
     constructor(parentId) {
         if (!parentId) throw new Error("Missing parameters");
@@ -42,10 +43,10 @@ export class Cpuinfo {
             this.container.querySelector('#mod_cpuinfo_cputitle').textContent = cpuName;
 
             // Start polling intervals after DOM is built
-            this.loadUpdater = setInterval(() => { this.updateCPUload(); }, 500);
-            this.tempUpdater = setInterval(() => { this.updateCPUtemp(); }, 2000);
-            this.speedUpdater = setInterval(() => { this.updateCPUspeed(); }, 1000);
-            this.tasksUpdater = setInterval(() => { this.updateCPUtasks(); }, 5000);
+            this.loadUpdater = setInterval(() => { this.updateCPUload(); }, POLL_INTERVALS.CPU_LOAD);
+            this.tempUpdater = setInterval(() => { this.updateCPUtemp(); }, POLL_INTERVALS.CPU_TEMP);
+            this.speedUpdater = setInterval(() => { this.updateCPUspeed(); }, POLL_INTERVALS.CPU_SPEED);
+            this.tasksUpdater = setInterval(() => { this.updateCPUtasks(); }, POLL_INTERVALS.CPU_TASKS);
             this._resetGuardFlags();
         }).catch(err => { console.warn('[Cpuinfo] init failed:', err); this._resetGuardFlags(); });
 

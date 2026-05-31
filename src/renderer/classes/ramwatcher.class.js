@@ -1,5 +1,7 @@
 const BYTES_PER_GIB = 1073741824; // 2^30
 
+import { POLL_INTERVALS } from '../constants.js';
+
 class RAMwatcher {
     constructor(parentId) {
         if (!parentId) throw new Error("Missing parameters");
@@ -35,7 +37,7 @@ class RAMwatcher {
         this.updateInfo();
         this.infoUpdater = setInterval(() => {
             this.updateInfo();
-        }, 1500);
+        }, POLL_INTERVALS.RAM);
     }
     updateInfo() {
         if (this.currentlyUpdating) return;

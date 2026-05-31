@@ -5,6 +5,8 @@ window.eval = globalThis.eval = function () {
 
 // Security helper
 export function escapeHtml(text) {
+    if (text == null) return '';
+    if (typeof text !== 'string') text = String(text);
     let map = {
         '&': '&amp;',
         '<': '&lt;',

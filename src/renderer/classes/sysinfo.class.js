@@ -1,4 +1,5 @@
 // eDEX-UI Sysinfo Module (ported to ES module - uses IPC for system info)
+import { POLL_INTERVALS } from '../constants.js';
 export class Sysinfo {
     constructor(parentId) {
         if (!parentId) throw new Error("Missing parameters");
@@ -31,11 +32,11 @@ export class Sysinfo {
         this.updateUptime();
         this.uptimeUpdater = setInterval(() => {
             this.updateUptime();
-        }, 60000);
+        }, POLL_INTERVALS.UPTIME);
         this.updateBattery();
         this.batteryUpdater = setInterval(() => {
             this.updateBattery();
-        }, 3000);
+        }, POLL_INTERVALS.BATTERY);
     }
 
     updateDate() {
