@@ -110,4 +110,42 @@ describe('Keyboard deadkey methods', () => {
             expect(kb.addTrema('A')).toBe('Ä');
         });
     });
+
+    describe('dispose', () => {
+        it('has a dispose method', () => {
+            const kb = createMinimalKeyboard();
+            expect(typeof kb.dispose).toBe('function');
+        });
+
+        it('removes keydown listener from document', () => {
+            const spy = vi.spyOn(document, 'removeEventListener');
+            const kb = createMinimalKeyboard();
+            kb.dispose();
+            expect(spy).toHaveBeenCalledWith('keydown', kb.keydownHandler);
+            spy.mockRestore();
+        });
+
+        it('removes keyup listener from document', () => {
+            const spy = vi.spyOn(document, 'removeEventListener');
+            const kb = createMinimalKeyboard();
+            kb.dispose();
+            expect(spy).toHaveBeenCalledWith('keyup', kb.keyupHandler);
+            spy.mockRestore();
+        });
+
+        it('removes blur listener from window', () => {
+            const spy = vi.spyOn(window, 'removeEventListener');
+            const kb = createMinimalKeyboard();
+            kb.dispose();
+            expect(spy).toHaveBeenCalledWith('blur', kb._blurHandler);
+            spy.mockRestore();
+        });
+
+        it('does not trigger audio after dispose', () => {
+            const kb = createMinimalKeyboard();
+            kb.dispose();
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', code: 'KeyA' }));
+            expect(window.audioManager.stdin.play).not.toHaveBeenCalled();
+        });
+    });
 });

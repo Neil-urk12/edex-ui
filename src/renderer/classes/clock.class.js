@@ -1,9 +1,10 @@
 // eDEX-UI Clock Module (ported to ES module)
+import { getSetting } from '../state.js';
 export class Clock {
     constructor(parentId) {
         if (!parentId) throw new Error("Missing parameters");
 
-        this.twelveHours = (window.settings.clockHours === 12);
+        this.twelveHours = (getSetting('clockHours') === 12);
 
         this.parent = document.getElementById(parentId);
         this.parent.innerHTML += `<div id="mod_clock" class="${(this.twelveHours) ? "mod_clock_twelve" : ""}">

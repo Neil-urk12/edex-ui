@@ -10,6 +10,7 @@ import { Cpuinfo } from './classes/cpuinfo.class.js';
 import { RAMwatcher } from './classes/ramwatcher.class.js';
 import { Terminal } from './classes/terminal.class.js';
 import { FilesystemDisplay } from './classes/filesystem.class.js';
+import { initSettings } from './state.js';
 
 // CSS imports (Vite injects as <style> tags)
 import '../assets/css/augmented.css';
@@ -64,6 +65,9 @@ if (kbOverride !== null) {
     window.settings.keyboard = kbOverride;
     window.settings.nointroOverride = true;
 }
+
+// Initialize centralized state module (non-breaking: window.settings still exists)
+initSettings(window.settings);
 
 // ============================================================
 // Load UI theme

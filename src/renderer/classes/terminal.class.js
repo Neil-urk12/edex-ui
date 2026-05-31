@@ -3,7 +3,7 @@ import { FitAddon } from 'xterm-addon-fit';
 // LigaturesAddon removed — requires Node.js APIs (util, fs) unavailable in browser context
 import { WebglAddon } from 'xterm-addon-webgl';
 import Color from 'color';
-import { THROTTLE } from '../constants.js';
+import { THROTTLE, TERMINAL_DEFAULTS } from '../constants.js';
 
 class Terminal {
     constructor(opts) {
@@ -95,12 +95,12 @@ class Terminal {
             cursorStyle: window.theme.terminal.cursorStyle || "block",
             allowTransparency: window.theme.terminal.allowTransparency || false,
             fontFamily: window.theme.terminal.fontFamily || "Fira Mono",
-            fontSize: window.theme.terminal.fontSize || window.settings.termFontSize || 15,
+			fontSize: window.theme.terminal.fontSize || window.settings.termFontSize || TERMINAL_DEFAULTS.FONT_SIZE,
             fontWeight: window.theme.terminal.fontWeight || "normal",
             fontWeightBold: window.theme.terminal.fontWeightBold || "bold",
             letterSpacing: window.theme.terminal.letterSpacing || 0,
             lineHeight: window.theme.terminal.lineHeight || 1,
-            scrollback: 1500,
+			scrollback: TERMINAL_DEFAULTS.SCROLLBACK,
             bellStyle: "none",
             theme: {
                 foreground: window.theme.terminal.foreground,

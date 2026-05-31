@@ -307,18 +307,18 @@ describe('HardwareInspector polling', () => {
         expect(instance._intervalId).toBeTruthy()
     })
 
-    it('clears interval on cleanup', () => {
+    it('clears interval on dispose', () => {
         mockGetSystemInfo.mockResolvedValue({ manufacturer: 'Dell', model: 'XPS' })
         mockGetChassisInfo.mockResolvedValue({ type: 'Laptop' })
 
         const instance = new HardwareInspector('test-parent')
         const spy = vi.spyOn(global, 'clearInterval')
 
-        instance.cleanup()
+        instance.dispose()
         expect(spy).toHaveBeenCalledWith(instance._intervalId)
     })
 
-    it('does not poll after cleanup', async () => {
+    it('does not poll after dispose', async () => {
         mockGetSystemInfo.mockResolvedValue({ manufacturer: 'Dell', model: 'XPS' })
         mockGetChassisInfo.mockResolvedValue({ type: 'Laptop' })
 
@@ -326,12 +326,20 @@ describe('HardwareInspector polling', () => {
         const updateSpy = vi.spyOn(instance, 'updateInfo')
         updateSpy.mockClear()
 
-        instance.cleanup()
+        instance.dispose()
 
         await vi.advanceTimersByTimeAsync(60000) // 3 intervals
         expect(updateSpy).not.toHaveBeenCalled()
     })
 })
+
+    it('does not have a cleanup method', () => {
+        mockGetSystemInfo.mockResolvedValue({ manufacturer: 'Dell', model: 'XPS' })
+        mockGetChassisInfo.mockResolvedValue({ type: 'Laptop' })
+
+        const instance = new HardwareInspector('test-parent')
+        expect(instance.cleanup).toBeUndefined()
+    })
 
 // ---------------------------------------------------------------------------
 // Integration: full flow

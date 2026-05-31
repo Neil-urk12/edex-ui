@@ -413,18 +413,24 @@ describe('Cpuinfo', () => {
             expect(cpuinfo.tasksUpdater).toBeDefined();
         });
 
-        it('clears intervals when cleanup is called', async () => {
+		it('clears intervals when dispose is called', async () => {
             const cpuinfo = new Cpuinfo('test-parent');
             await vi.advanceTimersByTimeAsync(0);
 
             const clearIntervalSpy = vi.spyOn(global, 'clearInterval');
 
-            cpuinfo.cleanup();
+			cpuinfo.dispose();
 
             expect(clearIntervalSpy).toHaveBeenCalledWith(cpuinfo.loadUpdater);
             expect(clearIntervalSpy).toHaveBeenCalledWith(cpuinfo.speedUpdater);
             expect(clearIntervalSpy).toHaveBeenCalledWith(cpuinfo.tasksUpdater);
             clearIntervalSpy.mockRestore();
         });
+
+		it('does not have a cleanup method', async () => {
+			const cpuinfo = new Cpuinfo('test-parent');
+			await vi.advanceTimersByTimeAsync(0);
+			expect(cpuinfo.cleanup).toBeUndefined();
+		});
     });
 });

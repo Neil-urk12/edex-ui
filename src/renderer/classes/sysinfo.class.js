@@ -28,6 +28,13 @@ export class Sysinfo {
             </div>
         </div>`;
 
+        this._els = {
+            year: this.parent.querySelector('#mod_sysinfo > div:first-child > h1'),
+            date: this.parent.querySelector('#mod_sysinfo > div:first-child > h2'),
+            uptime: this.parent.querySelector('#mod_sysinfo > div:nth-child(2) > h2'),
+            battery: this.parent.querySelector('#mod_sysinfo > div:nth-child(4) > h2'),
+        };
+
         this.updateDate();
         this.updateUptime();
         this.uptimeUpdater = setInterval(() => {
@@ -41,10 +48,10 @@ export class Sysinfo {
 
     updateDate() {
         let time = new Date();
-        document.querySelector("#mod_sysinfo > div:first-child > h1").innerHTML = time.getFullYear();
+        if (this._els.year) this._els.year.innerText = time.getFullYear();
 
         const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
-        document.querySelector("#mod_sysinfo > div:first-child > h2").innerHTML = months[time.getMonth()] + " " + time.getDate();
+        if (this._els.date) this._els.date.innerText = months[time.getMonth()] + ' ' + time.getDate();
     }
 
     updateUptime() {
@@ -52,7 +59,7 @@ export class Sysinfo {
             window.electronAPI.getSystemUptime().then(uptime => {
                 let h = Math.floor(uptime / 3600);
                 let m = Math.floor((uptime % 3600) / 60);
-                document.querySelector("#mod_sysinfo > div:nth-child(2) > h2").innerHTML = `${h}:${m}`;
+                if (this._els.uptime) this._els.uptime.innerText = `${h}:${m}`;
             }).catch(() => {
                 // Silently handle IPC failures — keep default display
             });
@@ -61,7 +68,7 @@ export class Sysinfo {
             let sec = Math.floor(performance.now() / 1000);
             let h = Math.floor(sec / 3600);
             let m = Math.floor((sec % 3600) / 60);
-            document.querySelector("#mod_sysinfo > div:nth-child(2) > h2").innerHTML = `${h}:${m}`;
+            if (this._els.uptime) this._els.uptime.innerText = `${h}:${m}`;
         }
     }
 
@@ -71,13 +78,13 @@ export class Sysinfo {
                 const battery = await navigator.getBattery();
                 const level = Math.round(battery.level * 100);
                 const charging = battery.charging;
-                document.querySelector("#mod_sysinfo > div:nth-child(4) > h2").innerHTML =
-                    `${level.toString().padStart(2, '0')}%` + (charging ? " ⚡" : "");
+                if (this._els.battery) this._els.battery.innerText =
+                    `${level.toString().padStart(2, '0')}%` + (charging ? ' ⚡' : '');
             } else {
-                document.querySelector("#mod_sysinfo > div:nth-child(4) > h2").innerHTML = "N/A";
+                if (this._els.battery) this._els.battery.innerText = 'N/A';
             }
         } catch {
-            document.querySelector("#mod_sysinfo > div:nth-child(4) > h2").innerHTML = "N/A";
+            if (this._els.battery) this._els.battery.innerText = 'N/A';
         }
     }
 

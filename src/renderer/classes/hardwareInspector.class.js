@@ -1,4 +1,6 @@
 // eDEX-UI HardwareInspector Module
+import { POLL_INTERVALS } from '../constants.js';
+import { guardedPoll } from '../utils/poll-guard.js';
 export class HardwareInspector {
     constructor(parentId) {
         if (!parentId) throw new Error("Missing parameters");
@@ -23,25 +25,28 @@ export class HardwareInspector {
 
         this.parent.append(this._element);
 
+        this._els = {
+            manufacturer: document.getElementById('mod_hardwareInspector_manufacturer'),
+            model: document.getElementById('mod_hardwareInspector_model'),
+            chassis: document.getElementById('mod_hardwareInspector_chassis'),
+        };
+
         this.updateInfo();
-        this._intervalId = setInterval(() => this.updateInfo(), 20000);
+        this._intervalId = setInterval(() => this.updateInfo(), POLL_INTERVALS.HARDWARE_INSPECTOR);
     }
 
     updateInfo() {
-        if (this._updating) return;
-        this._updating = true;
-        Promise.all([
-            window.electronAPI.getSystemInfo(),
-            window.electronAPI.getChassisInfo()
-        ]).then(([data, chassisData]) => {
-            const elManufacturer = document.getElementById("mod_hardwareInspector_manufacturer");
-            if (elManufacturer) elManufacturer.innerText = this._trimDataString(data.manufacturer);
-            const elModel = document.getElementById("mod_hardwareInspector_model");
-            if (elModel) elModel.innerText = this._trimDataString(data.model, data.manufacturer, chassisData.type);
-            const elChassis = document.getElementById("mod_hardwareInspector_chassis");
-            if (elChassis) elChassis.innerText = chassisData.type;
-            this._updating = false;
-        }).catch(err => { console.warn('[HardwareInspector]', err); this._updating = false; });
+        guardedPoll(this, '_updating',
+            () => Promise.all([
+                window.electronAPI.getSystemInfo(),
+                window.electronAPI.getChassisInfo()
+            ]),
+            ([data, chassisData]) => {
+                if (this._els.manufacturer) this._els.manufacturer.innerText = this._trimDataString(data.manufacturer);
+                if (this._els.model) this._els.model.innerText = this._trimDataString(data.model, data.manufacturer, chassisData.type);
+                if (this._els.chassis) this._els.chassis.innerText = chassisData.type;
+            }
+        );
     }
 
     _trimDataString(str, ...filters) {
@@ -67,6 +72,4 @@ export class HardwareInspector {
         clearInterval(this._intervalId);
     }
 
-    /** @deprecated Use dispose() */
-    cleanup() { this.dispose(); }
 }

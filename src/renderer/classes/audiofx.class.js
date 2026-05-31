@@ -1,4 +1,5 @@
 import { Howl, Howler } from 'howler';
+import { AUDIO_DEFAULTS } from '../constants.js';
 
 export class AudioManager {
     constructor(audioPaths) {
@@ -7,11 +8,11 @@ export class AudioManager {
             if (window.settings.disableFeedbackAudio === false) {
                 this.stdout = new Howl({
                     src: [audioPaths.stdout],
-                    volume: 0.4
+					volume: AUDIO_DEFAULTS.VOLUME
                 });
                 this.stdin = new Howl({
                     src: [audioPaths.stdin],
-                    volume: 0.4
+					volume: AUDIO_DEFAULTS.VOLUME
                 });
                 this.folder = new Howl({
                     src: [audioPaths.folder]
@@ -65,6 +66,10 @@ export class AudioManager {
                 }
             }
         });
+    }
+
+    dispose() {
+        Howler.unload();
     }
 }
 

@@ -1,4 +1,5 @@
 import deadkeysData from "./deadkeys.json";
+import { UI_TIMING } from '../constants.js';
 
 export class Keyboard {
     constructor(opts) {
@@ -131,8 +132,8 @@ export class Keyboard {
                         key.holdTimeout = setTimeout(() => {
                             key.holdInterval = setInterval(() => {
                                 this.pressKey(key);
-                            }, 70);
-                        }, 400);
+                            }, UI_TIMING.KEY_HOLD_INTERVAL);
+                        }, UI_TIMING.KEY_HOLD_TIMEOUT);
 
                         enterElements.forEach(key => {
                             key.setAttribute("class", "keyboard_key active keyboard_enter");
@@ -154,7 +155,7 @@ export class Keyboard {
                             enterElements.forEach(key => {
                                 key.setAttribute("class", "keyboard_key keyboard_enter");
                             });
-                        }, 100);
+                        }, UI_TIMING.KEY_BLINK_DURATION);
                     };
                 } else {
                     key.onmousedown = e => {
@@ -173,8 +174,8 @@ export class Keyboard {
                             key.holdTimeout = setTimeout(() => {
                                 key.holdInterval = setInterval(() => {
                                     this.pressKey(key);
-                                }, 70);
-                            }, 400);
+                                }, UI_TIMING.KEY_HOLD_INTERVAL);
+                            }, UI_TIMING.KEY_HOLD_TIMEOUT);
                             this.pressKey(key);
                         }
 
@@ -203,7 +204,7 @@ export class Keyboard {
                         key.setAttribute("class", "keyboard_key blink");
                         setTimeout(() => {
                             key.setAttribute("class", "keyboard_key");
-                        }, 100);
+                        }, UI_TIMING.KEY_BLINK_DURATION);
                     };
                 }
 
@@ -216,7 +217,7 @@ export class Keyboard {
         });
 
         // Tactile multi-touch support (#100)
-        this.container.addEventListener("touchstart", e => {
+        this._touchstartHandler = e => {
             e.preventDefault();
             for (let i = 0; i < e.changedTouches.length; i++) {
                 let key = e.changedTouches[i].target.parentElement;
@@ -232,8 +233,9 @@ export class Keyboard {
                     }
                 }
             }
-        });
-        let dropKeyTouchHandler = e => {
+        };
+        this.container.addEventListener("touchstart", this._touchstartHandler);
+        this._dropKeyTouchHandler = e => {
             e.preventDefault();
             for (let i = 0; i < e.changedTouches.length; i++) {
                 let key = e.changedTouches[i].target.parentElement;
@@ -250,8 +252,8 @@ export class Keyboard {
                 }
             }
         };
-        this.container.addEventListener("touchend", dropKeyTouchHandler);
-        this.container.addEventListener("touchcancel", dropKeyTouchHandler);
+        this.container.addEventListener("touchend", this._dropKeyTouchHandler);
+        this.container.addEventListener("touchcancel", this._dropKeyTouchHandler);
 
         // Bind actual keyboard actions to on-screen animations
         let findKey = e => {
@@ -309,9 +311,9 @@ export class Keyboard {
             }
         };
 
-        document.onkeydown = this.keydownHandler;
+        document.addEventListener('keydown', this.keydownHandler);
 
-        document.onkeyup = e => {
+        this.keyupHandler = e => {
             if (e.key === "Control" && e.getModifierState("AltGraph")) return;
 
             if (e.code === "ControlLeft" || e.code === "ControlRight") this.container.dataset.isCtrlOn = false;
@@ -328,24 +330,26 @@ export class Keyboard {
                     key.forEach(enterElement => {
                         enterElement.setAttribute("class", "keyboard_key keyboard_enter");
                     });
-                }, 100);
+                }, UI_TIMING.KEY_BLINK_DURATION);
             } else {
                 key.setAttribute("class", "keyboard_key blink");
                 setTimeout(() => {
                     key.setAttribute("class", "keyboard_key");
-                }, 100);
+                }, UI_TIMING.KEY_BLINK_DURATION);
             }
 
             if (this.container.dataset.passwordMode === "false" && e.key === "Enter")
                 window.audioManager.granted.play();
         };
+        document.addEventListener('keyup', this.keyupHandler);
 
-        window.addEventListener("blur", () => {
+        this._blurHandler = () => {
             document.querySelectorAll("div.keyboard_key.active").forEach(key => {
                 key.setAttribute("class", key.getAttribute("class").replace("active", ""));
                 key.onmouseup({ preventDefault: () => { return true; } });
             });
-        });
+        };
+        window.addEventListener("blur", this._blurHandler);
     }
 
     pressKey(key) {
@@ -570,6 +574,19 @@ export class Keyboard {
     addOverring(char) { return this._applyDeadkey('OVERRING', char); }
     toGreek(char) { return this._applyDeadkey('GREEK', char); }
     addIotasub(char) { return this._applyDeadkey('IOTASUB', char); }
+
+    dispose() {
+        document.removeEventListener('keydown', this.keydownHandler);
+        document.removeEventListener('keyup', this.keyupHandler);
+        window.removeEventListener('blur', this._blurHandler);
+        this.container.removeEventListener('touchstart', this._touchstartHandler);
+        this.container.removeEventListener('touchend', this._dropKeyTouchHandler);
+        this.container.removeEventListener('touchcancel', this._dropKeyTouchHandler);
+        this.container.querySelectorAll('.keyboard_key').forEach(key => {
+            clearTimeout(key.holdTimeout);
+            clearInterval(key.holdInterval);
+        });
+    }
 }
 
 // Factory: load layout JSON via electronAPI, then construct

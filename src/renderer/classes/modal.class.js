@@ -2,6 +2,7 @@
 // Original by Gabriel 'Squared' SAILLARD
 
 import { escapeHtml } from '../utils.js';
+import { Z_INDEX, UI_TIMING } from '../constants.js';
 
 window.modals = {};
 
@@ -31,26 +32,26 @@ export class Modal {
         switch(this.type) {
             case "error":
                 this.classes += " error";
-                zindex = 1500;
+				zindex = Z_INDEX.ERROR_MODAL;
                 buttons.push({label:"PANIC", action:"close"}, {label:"RELOAD", action:"reload"});
                 augs.push("tr-clip", "bl-rect", "r-clip");
                 break;
             case "warning":
                 this.classes += " warning";
-                zindex = 1000;
+				zindex = Z_INDEX.WARNING_MODAL;
                 buttons.push({label:"OK", action:"close"});
                 augs.push("bl-clip", "tr-clip", "r-rect", "b-rect");
                 break;
             case "custom":
                 this.classes += " info custom";
-                zindex = 500;
+				zindex = Z_INDEX.INFO_MODAL;
                 buttons = options.buttons || [];
                 buttons.push({label:"Close", action:"close"});
                 augs.push("tr-clip", "bl-clip");
                 break;
             default:
                 this.classes += " info";
-                zindex = 500;
+				zindex = Z_INDEX.INFO_MODAL;
                 buttons.push({label:"OK", action:"close"});
                 augs.push("tr-clip", "bl-clip");
                 break;
@@ -87,7 +88,7 @@ export class Modal {
                 modalElement.remove();
                 if (window.modals) delete window.modals[this.id];
                 document.removeEventListener("keydown", this._escapeKeyHandler);
-            }, 100);
+			}, UI_TIMING.MODAL_CLOSE_ANIMATION);
 
             if (typeof this.onclose === "function") {
                 this.onclose();
@@ -195,7 +196,7 @@ export class Modal {
             let rect = draggedModal.getBoundingClientRect();
             draggedModal.posX = rect.left;
             draggedModal.posY = rect.top;
-        }, 500);
+		}, UI_TIMING.MODAL_DRAG_DELAY);
 
         let modalMousemoveHandler = function(e) {
             draggedModal.posX = draggedModal.posX + (e.clientX - draggedModal.lastMouseX);

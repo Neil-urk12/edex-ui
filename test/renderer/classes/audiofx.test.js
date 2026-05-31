@@ -198,6 +198,12 @@ describe('AudioManager', () => {
             expect(manager.keyboard._src).toEqual([paths.keyboard]);
         });
     });
+
+    describe('dispose', () => {
+        it('has a dispose method', () => {
+            expect(typeof AudioManager.prototype.dispose).toBe('function');
+        });
+    });
 });
 
 describe('createAudioManager', () => {
