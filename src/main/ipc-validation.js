@@ -11,8 +11,12 @@ export function validateFilename(name) {
   if (name.includes('\u0000') || /%00/i.test(name)) throw new Error('Invalid path')
   // Reject URL-encoded path separators (defense-in-depth)
   if (/%2f|%5c|%2F|%5C/i.test(name)) throw new Error('Invalid path')
-  // Reject absolute paths
+  // Reject absolute paths (Unix and Windows)
   if (isAbsolute(name)) throw new Error('Invalid path')
+  // Reject Windows absolute paths (C:\, D:\, etc.)
+  if (/^[A-Za-z]:\\/.test(name)) throw new Error('Invalid path')
+  // Reject UNC paths (\\server\share)
+  if (/^\\\\/.test(name)) throw new Error('Invalid path')
   // Decode URL encoding (up to 3 levels) and check for traversal in all forms
   let decoded = name
   try { for (let i = 0; i < 3; i++) { const next = decodeURIComponent(decoded); if (next === decoded) break; decoded = next; } } catch {}
@@ -25,7 +29,7 @@ export function validateFilename(name) {
     if (s.startsWith('../') || s.startsWith('..\\') || s.includes('/../') || s.includes('\\..\\') || s.endsWith('/..') || s.endsWith('\\..')) {
       throw new Error('Invalid path')
     }
-}
+  }
 }
 
 /**
@@ -64,7 +68,6 @@ export function validateWithin(filePath, allowedDir) {
   return resolved
 }
 
-
 /**
  * Validate and resolve an asset-relative path within userData/assets.
  * Used by readAsset and edex-audio protocol handler.
@@ -72,6 +75,12 @@ export function validateWithin(filePath, allowedDir) {
  */
 export function validateAssetPath(relativePath, userData) {
   if (typeof relativePath !== 'string' || relativePath.includes('\0') || relativePath.trim() === '') throw new Error('Invalid path')
+  // Reject absolute paths immediately
+  if (isAbsolute(relativePath)) throw new Error('Path traversal detected')
+  // Reject Windows absolute paths
+  if (/^[A-Za-z]:\\/.test(relativePath)) throw new Error('Path traversal detected')
+  // Reject UNC paths (\\server\share)
+  if (/^\\\\/.test(relativePath)) throw new Error('Path traversal detected')
   const absPath = join(userData, 'assets', relativePath)
   const assetsDir = resolve(join(userData, 'assets'))
   let absResolved
@@ -88,4 +97,3 @@ export function validateAssetPath(relativePath, userData) {
   }
   return absResolved
 }
-

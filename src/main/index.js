@@ -13,6 +13,7 @@ import { TerminalSession } from './terminal.js'
 import { validateFilename, validateAndResolve, validateWithin, validateAssetPath } from './ipc-validation.js'
 import si from 'systeminformation'
 import { sendToMainWindow, readJsonFile, ensureDir } from './ipc-helpers.js'
+import { logger } from './logger.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -371,10 +372,10 @@ function createWindow(settings) {
   })
 
   if (process.env.ELECTRON_RENDERER_URL) {
-    console.log('[MAIN] Loading renderer URL:', process.env.ELECTRON_RENDERER_URL);
+    logger.info('[MAIN] Loading renderer URL:', process.env.ELECTRON_RENDERER_URL);
     mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
   } else {
-    console.log('[MAIN] Loading renderer file:', join(__dirname, '../renderer/index.html'));
+    logger.info('[MAIN] Loading renderer file:', join(__dirname, '../renderer/index.html'));
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
 
@@ -386,11 +387,11 @@ function createWindow(settings) {
   })
   mainWindow.webContents.on('console-message', (e, level, message, line, sourceId) => {
     const levels = ['verbose','info','warning','error'];
-    console.log('[RENDERER]', levels[level] || level, message, sourceId ? `(${sourceId}:${line})` : '')
+    logger.info('[RENDERER]', levels[level] || level, message, sourceId ? `(${sourceId}:${line})` : '')
   })
 
   mainWindow.once('ready-to-show', () => {
-    console.log('[MAIN] ready-to-show fired, showing window')
+    logger.info('[MAIN] ready-to-show fired, showing window')
     mainWindow.show()
   })
 
