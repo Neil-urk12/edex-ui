@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
 
 // Mock xterm and addons — use vi.hoisted so mocks exist when vi.mock factories run
 const { mockTerminalInstance } = vi.hoisted(() => ({
@@ -46,6 +48,10 @@ vi.mock('xterm-addon-fit', () => ({
 
 vi.mock('xterm-addon-webgl', () => ({
     WebglAddon: vi.fn().mockImplementation(function() { return mockWebglAddonInstance; }),
+}));
+
+vi.mock('../../../src/renderer/state.js', () => ({
+    getSetting: (key, defaultValue) => window.settings[key] ?? defaultValue,
 }));
 
 vi.mock('color', () => {
@@ -670,5 +676,15 @@ describe('Terminal', () => {
                 expect(Color).toHaveBeenCalledTimes(32);
             });
         });
+    });
+});
+
+describe('terminal.class.js source migration', () => {
+    it('uses getSetting instead of direct window.settings access for migrated keys', () => {
+        const src = readFileSync(resolve(__dirname, '../../../src/renderer/classes/terminal.class.js'), 'utf-8');
+        expect(src).toContain('getSetting');
+        expect(src).not.toMatch(/window\.settings\.termFontSize/);
+        expect(src).not.toMatch(/window\.settings\.experimentalGlobeFeatures/);
+        expect(src).not.toMatch(/window\.settings\.allowWindowed/);
     });
 });

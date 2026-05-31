@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { RAMwatcher } from '../../../src/renderer/classes/ramwatcher.class.js';
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
 
 describe('RAMwatcher', () => {
     let parentElement;
@@ -49,6 +51,26 @@ describe('RAMwatcher', () => {
         });
     });
 
+    describe('guard flag initialization', () => {
+        it('initializes currentlyUpdating to false before guardedPoll sets it', async () => {
+            // Spy on guardedPoll to prevent it from setting the flag,
+            // so we can check the constructor's raw initialization
+            const pollGuard = await import('../../../src/renderer/utils/poll-guard.js');
+            const spy = vi.spyOn(pollGuard, 'guardedPoll').mockImplementation(
+                (instance, flagName, apiCall, onSuccess) => {
+                    // Do NOT set instance[flagName] — just run the callback
+                    return apiCall().then(data => onSuccess(data)).catch(() => {});
+                }
+            );
+            try {
+                const rw = new RAMwatcher('test-parent');
+                expect(rw.currentlyUpdating).toBe(false);
+            } finally {
+                spy.mockRestore();
+            }
+        });
+    });
+
     describe('error handling', () => {
         it('does not leave currentlyUpdating stuck true when getMemoryInfo rejects', async () => {
             mockElectronAPI.getMemoryInfo.mockRejectedValue(new Error('IPC failed'));
@@ -78,5 +100,15 @@ describe('RAMwatcher', () => {
 
             expect(mockElectronAPI.getMemoryInfo).toHaveBeenCalledTimes(2);
         });
+    });
+});
+
+describe('ramwatcher.class.js migration guard', () => {
+    it('returns guardedPoll promise to prevent unhandled rejections', () => {
+        const src = readFileSync(resolve(__dirname, '../../../src/renderer/classes/ramwatcher.class.js'), 'utf-8');
+        const pollLines = src.split('\n').filter(l => l.includes('guardedPoll(') && !l.includes('import') && !l.trim().startsWith('//'));
+        for (const line of pollLines) {
+            expect(line.trim()).toMatch(/^return guardedPoll/);
+        }
     });
 });

@@ -1,11 +1,12 @@
 import { Howl, Howler } from 'howler';
 import { AUDIO_DEFAULTS } from '../constants.js';
+import { getSetting } from '../state.js';
 
 export class AudioManager {
     constructor(audioPaths) {
         // audioPaths: object with sound name => resolved URL/path
-        if (window.settings.audio === true) {
-            if (window.settings.disableFeedbackAudio === false) {
+        if (getSetting('audio') === true) {
+            if (getSetting('disableFeedbackAudio') === false) {
                 this.stdout = new Howl({
                     src: [audioPaths.stdout],
 					volume: AUDIO_DEFAULTS.VOLUME
@@ -49,7 +50,7 @@ export class AudioManager {
                 src: [audioPaths.error]
             });
 
-            Howler.volume(window.settings.audioVolume);
+            Howler.volume(getSetting('audioVolume'));
         } else {
             Howler.volume(0.0);
         }

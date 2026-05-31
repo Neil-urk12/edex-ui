@@ -1,5 +1,6 @@
 import { escapeHtml, encodePathURI, delay } from '../utils.js';
 import { POLL_INTERVALS } from '../constants.js';
+import { getSetting, setSetting } from '../state.js';
 
 // Path helpers (no require("path") in renderer)
 const pathJoin = (...parts) => parts.join('/').replace(/\/+/g, '/');
@@ -135,22 +136,22 @@ class FilesystemDisplay {
         };
 
         this.toggleHidedotfiles = () => {
-            if (window.settings.hideDotfiles) {
+            if (getSetting('hideDotfiles')) {
                 container.classList.remove("hideDotfiles");
-                window.settings.hideDotfiles = false;
+                setSetting('hideDotfiles', false);
             } else {
                 container.classList.add("hideDotfiles");
-                window.settings.hideDotfiles = true;
+                setSetting('hideDotfiles', true);
             }
         };
 
         this.toggleListview = () => {
-            if (window.settings.fsListView) {
+            if (getSetting('fsListView')) {
                 container.classList.remove("list-view");
-                window.settings.fsListView = false;
+                setSetting('fsListView', false);
             } else {
                 container.classList.add("list-view");
-                window.settings.fsListView = true;
+                setSetting('fsListView', true);
             }
         };
 
@@ -197,7 +198,7 @@ class FilesystemDisplay {
 
             this.cwd = [];
 
-            const settingsDir = window.settings.settingsDir || '';
+            const settingsDir = getSetting('settingsDir', '');
 
             if (!content) {
                 this.setFailedState();
@@ -248,8 +249,8 @@ class FilesystemDisplay {
                             e.hidden = true;
                         }
 
-                        const themesDir = window.settings.themesPath || '';
-                        const keyboardsDir = window.settings.kbLayoutPath || '';
+                        const themesDir = getSetting('themesPath', '');
+                        const keyboardsDir = getSetting('kbLayoutPath', '');
 
                         if (e.category === "file" && tcwd === themesDir && file.endsWith(".json")) e.type = "edex-theme";
                         if (e.category === "file" && tcwd === keyboardsDir && file.endsWith(".json")) e.type = "edex-kblayout";
@@ -480,7 +481,7 @@ class FilesystemDisplay {
                 let e = this.filesContainer.childNodes[id];
                 e.setAttribute("class", e.className.replace(" animationWait", ""));
 
-                if (window.settings.hideDotfiles !== true || e.className.indexOf("hidden") === -1) {
+                if (getSetting('hideDotfiles') !== true || e.className.indexOf("hidden") === -1) {
                     window.audioManager.folder.play();
                     await delay(30);
                 }
@@ -533,7 +534,7 @@ class FilesystemDisplay {
 
         // Auto-index on first load
         if (window.performance.navigation.type === 0) {
-            this.readFS(window.settings.cwd || '/');
+            this.readFS(getSetting('cwd', '/'));
         }
 
         this.openFile = async (name) => {

@@ -31,12 +31,12 @@ export class HardwareInspector {
             chassis: document.getElementById('mod_hardwareInspector_chassis'),
         };
 
-        this.updateInfo();
-        this._intervalId = setInterval(() => this.updateInfo(), POLL_INTERVALS.HARDWARE_INSPECTOR);
+        this.updateInfo().catch(() => {}); // errors already warned by guardedPoll
+        this._intervalId = setInterval(() => this.updateInfo().catch(() => {}), /* errors already warned by guardedPoll */ POLL_INTERVALS.HARDWARE_INSPECTOR);
     }
 
     updateInfo() {
-        guardedPoll(this, '_updating',
+        return guardedPoll(this, '_updating',
             () => Promise.all([
                 window.electronAPI.getSystemInfo(),
                 window.electronAPI.getChassisInfo()

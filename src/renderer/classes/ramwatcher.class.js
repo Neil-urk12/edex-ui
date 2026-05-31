@@ -39,15 +39,17 @@ class RAMwatcher {
 			swapText: document.getElementById('mod_ramwatcher_swaptext'),
 		};
 
-		this.updateInfo();
+        this.currentlyUpdating = false;
+
+		this.updateInfo().catch(() => {}); // errors already warned by guardedPoll
 
         // Init updaters
         this.infoUpdater = setInterval(() => {
-            this.updateInfo();
+            this.updateInfo().catch(() => {}); // errors already warned by guardedPoll
         }, POLL_INTERVALS.RAM);
     }
 	updateInfo() {
-		guardedPoll(this, 'currentlyUpdating',
+		return guardedPoll(this, 'currentlyUpdating',
 			() => window.electronAPI.getMemoryInfo(),
 			data => {
 				if (data.free+data.used !== data.total) throw new Error('RAM Watcher Error: Bad memory values');

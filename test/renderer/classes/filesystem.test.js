@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
 
 // Mock Modal globally before import
 class MockModal {
@@ -809,5 +811,29 @@ describe('FilesystemDisplay - readFS error resilience', () => {
     // All filtered out — only nav entries remain
     expect(fsd.cwd.length).toBe(2); // "Show disks" + "Go up"
     expect(fsd._reading).toBe(false);
+  });
+});
+
+describe('filesystem.class.js migration guard — window.settings replaced by getSetting/setSetting', () => {
+  it('uses getSetting instead of direct window.settings reads', () => {
+    const src = readFileSync(resolve(__dirname, '../../../src/renderer/classes/filesystem.class.js'), 'utf-8');
+    expect(src).toContain('getSetting');
+    expect(src).not.toMatch(/window\.settings\.hideDotfiles/);
+    expect(src).not.toMatch(/window\.settings\.fsListView/);
+    expect(src).not.toMatch(/window\.settings\.settingsDir/);
+    expect(src).not.toMatch(/window\.settings\.themesPath/);
+    expect(src).not.toMatch(/window\.settings\.kbLayoutPath/);
+    expect(src).not.toMatch(/window\.settings\.cwd/);
+  });
+
+  it('uses setSetting for mutations', () => {
+    const src = readFileSync(resolve(__dirname, '../../../src/renderer/classes/filesystem.class.js'), 'utf-8');
+    expect(src).toContain('setSetting');
+  });
+
+  it('imports getSetting and setSetting from state.js', () => {
+    const src = readFileSync(resolve(__dirname, '../../../src/renderer/classes/filesystem.class.js'), 'utf-8');
+    expect(src).toMatch(/import.*getSetting.*from.*state\.js/);
+    expect(src).toMatch(/import.*setSetting.*from.*state\.js/);
   });
 });

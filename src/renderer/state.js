@@ -1,24 +1,29 @@
 /**
- * Centralized state for renderer.
- * Replaces direct window.* global access with a testable module.
+ * Centralized state accessor for renderer.
+ * Reads from globalThis.settings (set at boot, updated on save).
  */
 
-let _settings = {};
+let _initSettingsWarned = false;
+let _noSettingsWarned = false;
 
 /**
- * Initialize settings state. Call once at boot.
+ * Initialize settings state. Currently a no-op — settings live on globalThis.settings.
+ * Retained for call-site compatibility.
  * @param {object} settings - Settings object from main process
  */
 export function initSettings(settings) {
-	_settings = Object.freeze({ ...settings });
+	if (!_initSettingsWarned) {
+		console.warn('[state] initSettings is deprecated — settings live on globalThis.settings. This call is a no-op.');
+		_initSettingsWarned = true;
+	}
 }
 
 /**
  * Get the current settings object.
- * @returns {object} Frozen settings object
+ * @returns {object} The live settings object
  */
 export function getSettings() {
-	return _settings;
+	return { ...(globalThis.settings || {}) };
 }
 
 /**
@@ -28,12 +33,29 @@ export function getSettings() {
  * @returns {*} Setting value
  */
 export function getSetting(key, defaultValue) {
-	return key in _settings ? _settings[key] : defaultValue;
+	const settings = globalThis.settings;
+	if (!settings) {
+		if (!_noSettingsWarned) {
+			console.warn('[state] getSetting called before globalThis.settings is set');
+			_noSettingsWarned = true;
+		}
+		return defaultValue;
+	}
+	return key in settings ? settings[key] : defaultValue;
 }
 
 /**
- * Reset state (for testing only).
+ * Set a single setting value.
+ * @param {string} key - Setting key
+ * @param {*} value - Setting value
  */
-export function _resetState() {
-	_settings = {};
+export function setSetting(key, value) {
+	if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+		console.warn('[state] setSetting: blocked dangerous key:', key);
+		return;
+	}
+	if (!globalThis.settings) {
+		globalThis.settings = {};
+	}
+	globalThis.settings[key] = value;
 }

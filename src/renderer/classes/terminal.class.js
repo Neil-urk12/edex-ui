@@ -4,6 +4,7 @@ import { FitAddon } from 'xterm-addon-fit';
 import { WebglAddon } from 'xterm-addon-webgl';
 import Color from 'color';
 import { THROTTLE, TERMINAL_DEFAULTS } from '../constants.js';
+import { getSetting } from '../state.js';
 
 class Terminal {
     constructor(opts) {
@@ -95,7 +96,7 @@ class Terminal {
             cursorStyle: window.theme.terminal.cursorStyle || "block",
             allowTransparency: window.theme.terminal.allowTransparency || false,
             fontFamily: window.theme.terminal.fontFamily || "Fira Mono",
-			fontSize: window.theme.terminal.fontSize || window.settings.termFontSize || TERMINAL_DEFAULTS.FONT_SIZE,
+			fontSize: window.theme.terminal.fontSize || getSetting('termFontSize') || TERMINAL_DEFAULTS.FONT_SIZE,
             fontWeight: window.theme.terminal.fontWeight || "normal",
             fontWeightBold: window.theme.terminal.fontWeightBold || "bold",
             letterSpacing: window.theme.terminal.letterSpacing || 0,
@@ -162,7 +163,7 @@ class Terminal {
             }
 
             // See #397
-            if (!window.settings.experimentalGlobeFeatures) return;
+            if (!getSetting('experimentalGlobeFeatures')) return;
             let ips = data.match(/((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/g);
             if (ips !== null && ips.length >= 1) {
                 ips = ips.filter((val, index, self) => { return self.indexOf(val) === index; });
@@ -233,7 +234,7 @@ class Terminal {
         });
 
         document.querySelector(".xterm-helper-textarea").addEventListener("keydown", e => {
-            if (e.key === "F11" && window.settings.allowWindowed) {
+            if (e.key === "F11" && getSetting('allowWindowed')) {
                 e.preventDefault();
                 window.toggleFullScreen();
             }
@@ -259,7 +260,7 @@ class Terminal {
             // if (d === 120) y = 1;
             if (d === 256) x = 2;
 
-            if (window.settings.termFontSize < 15) y = y - 1;
+            if (getSetting('termFontSize') < 15) y = y - 1;
 
             cols = cols+x;
             rows = rows+y;

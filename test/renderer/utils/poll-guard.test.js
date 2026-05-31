@@ -62,4 +62,47 @@ describe('guardedPoll', () => {
 			expect.any(Error)
 		);
 	});
+
+	it('warns on callback errors', async () => {
+		const apiCall = vi.fn().mockResolvedValue('data');
+		const throwingOnSuccess = vi.fn().mockImplementation(() => { throw new Error('callback boom'); });
+		const promise = guardedPoll(instance, 'flag', apiCall, throwingOnSuccess);
+		await promise.catch(() => {});
+		expect(console.warn).toHaveBeenCalledWith(
+			expect.stringContaining('failed'),
+			expect.any(Error)
+		);
+	});
+
+	it('returns a Promise', () => {
+		const apiCall = vi.fn().mockResolvedValue('data');
+		const result = guardedPoll(instance, 'flag', apiCall, onSuccess);
+		expect(result).toBeInstanceOf(Promise);
+	});
+
+	it('returned promise resolves (not rejects) when onSuccess throws', async () => {
+		const apiCall = vi.fn().mockResolvedValue('data');
+		const throwingOnSuccess = vi.fn().mockImplementation(() => { throw new Error('callback boom'); });
+		const promise = guardedPoll(instance, 'flag', apiCall, throwingOnSuccess);
+		await expect(promise).resolves.toBeUndefined();
+	});
+
+	it('still warns when onSuccess throws', async () => {
+		const apiCall = vi.fn().mockResolvedValue('data');
+		const throwingOnSuccess = vi.fn().mockImplementation(() => { throw new Error('callback boom'); });
+		const promise = guardedPoll(instance, 'flag', apiCall, throwingOnSuccess);
+		await promise.catch(() => {});
+		expect(console.warn).toHaveBeenCalledWith(
+			expect.stringContaining('failed'),
+			expect.any(Error)
+		);
+	});
+
+	it('resets flag when onSuccess throws', async () => {
+		const apiCall = vi.fn().mockResolvedValue('data');
+		const throwingOnSuccess = vi.fn().mockImplementation(() => { throw new Error('callback boom'); });
+		const promise = guardedPoll(instance, 'flag', apiCall, throwingOnSuccess);
+		await promise.catch(() => {});
+		expect(instance.flag).toBe(false);
+	});
 });

@@ -43,20 +43,20 @@ export class Cpuinfo {
             </div>`;
             this.container.querySelector('#mod_cpuinfo_cputitle').textContent = cpuName;
 
-			this._els = {
-				usageCounter0: document.getElementById('mod_cpuinfo_usagecounter0'),
-				usageCounter1: document.getElementById('mod_cpuinfo_usagecounter1'),
-				temp: document.getElementById('mod_cpuinfo_temp'),
-				speedMin: document.getElementById('mod_cpuinfo_speed_min'),
-				speedMax: document.getElementById('mod_cpuinfo_speed_max'),
-				tasks: document.getElementById('mod_cpuinfo_tasks'),
-			};
+            this._els = {
+                usageCounter0: document.getElementById('mod_cpuinfo_usagecounter0'),
+                usageCounter1: document.getElementById('mod_cpuinfo_usagecounter1'),
+                temp: document.getElementById('mod_cpuinfo_temp'),
+                speedMin: document.getElementById('mod_cpuinfo_speed_min'),
+                speedMax: document.getElementById('mod_cpuinfo_speed_max'),
+                tasks: document.getElementById('mod_cpuinfo_tasks'),
+            };
 
             // Start polling intervals after DOM is built
-            this.loadUpdater = setInterval(() => { this.updateCPUload(); }, POLL_INTERVALS.CPU_LOAD);
-            this.tempUpdater = setInterval(() => { this.updateCPUtemp(); }, POLL_INTERVALS.CPU_TEMP);
-            this.speedUpdater = setInterval(() => { this.updateCPUspeed(); }, POLL_INTERVALS.CPU_SPEED);
-            this.tasksUpdater = setInterval(() => { this.updateCPUtasks(); }, POLL_INTERVALS.CPU_TASKS);
+            this.loadUpdater = setInterval(() => { this.updateCPUload().catch(() => {}); }, POLL_INTERVALS.CPU_LOAD); /* errors already warned by guardedPoll */
+            this.tempUpdater = setInterval(() => { this.updateCPUtemp().catch(() => {}); }, POLL_INTERVALS.CPU_TEMP); /* errors already warned by guardedPoll */
+            this.speedUpdater = setInterval(() => { this.updateCPUspeed().catch(() => {}); }, POLL_INTERVALS.CPU_SPEED); /* errors already warned by guardedPoll */
+            this.tasksUpdater = setInterval(() => { this.updateCPUtasks().catch(() => {}); }, POLL_INTERVALS.CPU_TASKS); /* errors already warned by guardedPoll */
             this._resetGuardFlags();
         }).catch(err => { console.warn('[Cpuinfo] init failed:', err); this._resetGuardFlags(); });
 
@@ -69,48 +69,48 @@ export class Cpuinfo {
         this.updatingCPUtemp = true;
     }
 
-	updateCPUload() {
-		guardedPoll(this, 'currentlyUpdating',
-			() => window.electronAPI.getCpuLoad(),
-			data => {
-				const half = Math.floor(data.cpus.length / 2);
-				const firstHalf = data.cpus.slice(0, half);
-				const secondHalf = data.cpus.slice(half);
-				const avg0 = firstHalf.length > 0 ? Math.round(firstHalf.reduce((sum, c) => sum + c.load, 0) / firstHalf.length) : 0;
-				const avg1 = secondHalf.length > 0 ? Math.round(secondHalf.reduce((sum, c) => sum + c.load, 0) / secondHalf.length) : 0;
-				if (this._els.usageCounter0) this._els.usageCounter0.innerText = `Avg. ${avg0}%`;
-				if (this._els.usageCounter1) this._els.usageCounter1.innerText = `Avg. ${avg1}%`;
-			}
-		);
-	}
+    updateCPUload() {
+        return guardedPoll(this, 'currentlyUpdating',
+            () => window.electronAPI.getCpuLoad(),
+            data => {
+                const half = Math.floor(data.cpus.length / 2);
+                const firstHalf = data.cpus.slice(0, half);
+                const secondHalf = data.cpus.slice(half);
+                const avg0 = firstHalf.length > 0 ? Math.round(firstHalf.reduce((sum, c) => sum + c.load, 0) / firstHalf.length) : 0;
+                const avg1 = secondHalf.length > 0 ? Math.round(secondHalf.reduce((sum, c) => sum + c.load, 0) / secondHalf.length) : 0;
+                if (this._els.usageCounter0) this._els.usageCounter0.innerText = `Avg. ${avg0}%`;
+                if (this._els.usageCounter1) this._els.usageCounter1.innerText = `Avg. ${avg1}%`;
+            }
+        );
+    }
 
-	updateCPUtemp() {
-		guardedPoll(this, 'updatingCPUtemp',
-			() => window.electronAPI.getCpuTemperature(),
-			data => {
-				if (this._els.temp) this._els.temp.innerText = `${data.max}°C`;
-			}
-		);
-	}
+    updateCPUtemp() {
+        return guardedPoll(this, 'updatingCPUtemp',
+            () => window.electronAPI.getCpuTemperature(),
+            data => {
+                if (this._els.temp) this._els.temp.innerText = `${data.max}°C`;
+            }
+        );
+    }
 
-	updateCPUspeed() {
-		guardedPoll(this, 'updatingCPUspeed',
-			() => window.electronAPI.getCpuInfo(),
-			data => {
-				if (this._els.speedMin) this._els.speedMin.innerText = `${data.speed}GHz`;
-				if (this._els.speedMax) this._els.speedMax.innerText = `${data.speedMax}GHz`;
-			}
-		);
-	}
+    updateCPUspeed() {
+        return guardedPoll(this, 'updatingCPUspeed',
+            () => window.electronAPI.getCpuInfo(),
+            data => {
+                if (this._els.speedMin) this._els.speedMin.innerText = `${data.speed}GHz`;
+                if (this._els.speedMax) this._els.speedMax.innerText = `${data.speedMax}GHz`;
+            }
+        );
+    }
 
-	updateCPUtasks() {
-		guardedPoll(this, 'updatingCPUtasks',
-			() => window.electronAPI.getProcesses(),
-			data => {
-				if (this._els.tasks) this._els.tasks.innerText = `${data.all}`;
-			}
-		);
-	}
+    updateCPUtasks() {
+        return guardedPoll(this, 'updatingCPUtasks',
+            () => window.electronAPI.getProcesses(),
+            data => {
+                if (this._els.tasks) this._els.tasks.innerText = `${data.all}`;
+            }
+        );
+    }
 
     _resetGuardFlags() {
         this.currentlyUpdating = false;

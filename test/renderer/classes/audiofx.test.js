@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
 
 // Mock howler before importing the module under test
 // Use class so `new Howl(...)` works; track instances for assertions
@@ -21,6 +23,10 @@ const { mockHowlInstances, MockHowl, mockHowlerVolume } = vi.hoisted(() => {
 vi.mock('howler', () => ({
     Howl: MockHowl,
     Howler: { volume: mockHowlerVolume },
+}));
+
+vi.mock('../../../src/renderer/state.js', () => ({
+    getSetting: (key, defaultValue) => window.settings[key] ?? defaultValue,
 }));
 
 import { AudioManager, createAudioManager } from '../../../src/renderer/classes/audiofx.class.js';
@@ -203,6 +209,16 @@ describe('AudioManager', () => {
         it('has a dispose method', () => {
             expect(typeof AudioManager.prototype.dispose).toBe('function');
         });
+    });
+});
+
+describe('migration guard', () => {
+    it('uses getSetting instead of direct window.settings access', () => {
+        const src = readFileSync(resolve(__dirname, '../../../src/renderer/classes/audiofx.class.js'), 'utf-8');
+        expect(src).toContain('getSetting');
+        expect(src).not.toMatch(/window\.settings\.audio\b/);
+        expect(src).not.toMatch(/window\.settings\.disableFeedbackAudio/);
+        expect(src).not.toMatch(/window\.settings\.audioVolume/);
     });
 });
 

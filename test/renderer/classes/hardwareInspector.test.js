@@ -403,3 +403,16 @@ describe('HardwareInspector integration', () => {
         expect(document.getElementById('mod_hardwareInspector_chassis').innerText).toBe('Notebook')
     })
 })
+
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
+
+describe('hardwareInspector.class.js migration guard', () => {
+    it('returns guardedPoll promise to prevent unhandled rejections', () => {
+        const src = readFileSync(resolve(__dirname, '../../../src/renderer/classes/hardwareInspector.class.js'), 'utf-8');
+        const pollLines = src.split('\n').filter(l => l.includes('guardedPoll(') && !l.includes('import') && !l.trim().startsWith('//'));
+        for (const line of pollLines) {
+            expect(line.trim()).toMatch(/^return guardedPoll/);
+        }
+    });
+});
