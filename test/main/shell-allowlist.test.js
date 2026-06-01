@@ -1,32 +1,18 @@
 import { describe, it, expect } from 'vitest'
+import { TRUSTED_SHELL_DIRS, TRUSTED_WINDOWS_SHELLS, ALLOWED_SHELL_NAMES, isShellAllowed } from '../../src/main/security-constants.js'
 
 // ============================================================
-// These tests validate the regex/logic extracted from
-// src/main/index.js lines 361-397.  The source of truth is
-// still index.js; these tests enforce expected behaviour.
+// These tests validate the shell allowlist logic now exported
+// from src/main/security-constants.js.
 // ============================================================
 
-// Regex from index.js line 413 (FIXED: includes \t and \0)
+// Regex from ipc-terminal.js (param sanitization)
 const METACHAR_REGEX = /[;&|`$(){}!<>~'"\\]/u
 // oxlint-disable-next-line no-control-regex
 const CONTROL_REGEX = /\u000a|\u000d|\u0009|\u0000|#/u
 
-// Dangerous-flag check from index.js line 416 (FIXED)
+// Dangerous-flag check from ipc-terminal.js
 const DANGEROUS_FLAG_REGEX = /^-[a-zA-Z]*[cC]$|^\/[cC]$|^--command([= ]|$)/
-
-// Directory-based allowlist (mirrors index.js FIX 3)
-const TRUSTED_SHELL_DIRS = [
-  '/bin/', '/usr/bin/', '/usr/local/bin/',
-  '/opt/homebrew/bin/',
-  '/run/current-system/sw/bin/',
-  '/snap/bin/',
-]
-const TRUSTED_WINDOWS_SHELLS = ['powershell.exe', 'cmd.exe', 'pwsh.exe']
-
-function isShellAllowed(resolvedPath) {
-  if (TRUSTED_WINDOWS_SHELLS.includes(resolvedPath)) return true
-  return TRUSTED_SHELL_DIRS.some(dir => resolvedPath.startsWith(dir))
-}
 
 // ---- Metacharacter detection ----
 

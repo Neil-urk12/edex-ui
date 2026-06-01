@@ -1146,3 +1146,165 @@ describe('ipc-filesystem.js', () => {
     })
   })
 })
+
+// ============================================================
+// ipc-terminal.js
+// ============================================================
+describe('ipc-terminal.js', () => {
+  let register, killAllTerminals
+
+  beforeEach(async () => {
+    vi.clearAllMocks()
+    // Restore which mock implementation (cleared by clearAllMocks)
+    const which = (await import('which')).default
+    which.mockResolvedValue('/bin/bash')
+    const mod = await import('../../src/main/ipc-terminal.js')
+    register = mod.register
+    killAllTerminals = mod.killAllTerminals
+  })
+
+  function getHandler(channel) {
+    const call = ipcMain.handle.mock.calls.find(([ch]) => ch === channel)
+    if (!call) throw new Error(`Handler not found: ${channel}`)
+    return call[1]
+  }
+
+  function getOnHandler(channel) {
+    const call = ipcMain.on.mock.calls.find(([ch]) => ch === channel)
+    if (!call) throw new Error(`On-handler not found: ${channel}`)
+    return call[1]
+  }
+
+  function deps(overrides = {}) {
+    return {
+      userData,
+      settingsFile,
+      defaultSettings,
+      readJsonFile: mockReadJsonFile,
+      app: { getVersion: () => '1.0.0' },
+      getWindow: () => ({ webContents: { send: vi.fn() }, isDestroyed: () => false }),
+      ...overrides
+    }
+  }
+
+  it('registers all four terminal handlers', () => {
+    register(ipcMain, deps())
+    const channels = ipcMain.handle.mock.calls.map(([ch]) => ch)
+    const onChannels = ipcMain.on.mock.calls.map(([ch]) => ch)
+    expect(channels).toContain('terminal:create')
+    expect(channels).toContain('terminal:kill')
+    expect(onChannels).toContain('terminal:write')
+    expect(onChannels).toContain('terminal:resize')
+  })
+
+  it('exposes killAllTerminals function', () => {
+    expect(typeof killAllTerminals).toBe('function')
+  })
+
+  it('terminal:create returns a terminal id', async () => {
+    register(ipcMain, deps())
+    const handler = getHandler('terminal:create')
+    const id = await handler({}, {})
+    expect(typeof id).toBe('number')
+  })
+
+  it('terminal:create uses settings shell when no shell option provided', async () => {
+    const which = (await import('which')).default
+    which.mockResolvedValue('/bin/bash')
+    register(ipcMain, deps())
+    const handler = getHandler('terminal:create')
+    await handler({}, {})
+    const { TerminalSession } = await import('../../src/main/terminal.js')
+    expect(TerminalSession).toHaveBeenCalledWith(
+      expect.objectContaining({ shell: '/bin/bash' })
+    )
+  })
+
+  it('terminal:create uses options.shell when provided', async () => {
+    const which = (await import('which')).default
+    which.mockResolvedValue('/usr/bin/zsh')
+    register(ipcMain, deps())
+    const handler = getHandler('terminal:create')
+    await handler({}, { shell: 'zsh' })
+    const { TerminalSession } = await import('../../src/main/terminal.js')
+    expect(TerminalSession).toHaveBeenCalledWith(
+      expect.objectContaining({ shell: '/usr/bin/zsh' })
+    )
+  })
+
+  it('terminal:create rejects params with metacharacters', async () => {
+    register(ipcMain, deps())
+    const handler = getHandler('terminal:create')
+    await expect(handler({}, { params: [';rm -rf /'] })).rejects.toThrow(/forbidden characters/)
+  })
+
+  it('terminal:create rejects params with -c flag', async () => {
+    register(ipcMain, deps())
+    const handler = getHandler('terminal:create')
+    await expect(handler({}, { params: ['-c', 'echo hi'] })).rejects.toThrow(/-c flag/)
+  })
+
+  it('terminal:create rejects disallowed shells', async () => {
+    const which = (await import('which')).default
+    which.mockResolvedValue('/tmp/evil-shell')
+    register(ipcMain, deps())
+    const handler = getHandler('terminal:create')
+    await expect(handler({}, {})).rejects.toThrow(/No allowed shell/)
+  })
+
+  it('terminal:write forwards data to session', async () => {
+    register(ipcMain, deps())
+    const createHandler = getHandler('terminal:create')
+    const id = await createHandler({}, {})
+
+    const { TerminalSession } = await import('../../src/main/terminal.js')
+    const session = TerminalSession.mock.results[0].value
+    session.write = vi.fn()
+
+    const writeHandler = getOnHandler('terminal:write')
+    writeHandler({}, { id, data: 'ls\n' })
+    expect(session.write).toHaveBeenCalledWith('ls\n')
+  })
+
+  it('terminal:resize forwards dimensions to session', async () => {
+    register(ipcMain, deps())
+    const createHandler = getHandler('terminal:create')
+    const id = await createHandler({}, {})
+
+    const { TerminalSession } = await import('../../src/main/terminal.js')
+    const session = TerminalSession.mock.results[0].value
+    session.resize = vi.fn()
+
+    const resizeHandler = getOnHandler('terminal:resize')
+    resizeHandler({}, { id, cols: 120, rows: 40 })
+    expect(session.resize).toHaveBeenCalledWith(120, 40)
+  })
+
+  it('terminal:kill calls session.kill and removes from map', async () => {
+    register(ipcMain, deps())
+    const createHandler = getHandler('terminal:create')
+    const id = await createHandler({}, {})
+
+    const { TerminalSession } = await import('../../src/main/terminal.js')
+    const session = TerminalSession.mock.results[0].value
+    session.kill = vi.fn()
+
+    const killHandler = getHandler('terminal:kill')
+    await killHandler({}, id)
+    expect(session.kill).toHaveBeenCalled()
+  })
+
+  it('killAllTerminals kills all active sessions', async () => {
+    register(ipcMain, deps())
+    const createHandler = getHandler('terminal:create')
+    await createHandler({}, {})
+    await createHandler({}, {})
+
+    const { TerminalSession } = await import('../../src/main/terminal.js')
+    const sessions = TerminalSession.mock.results.map(r => r.value)
+    sessions.forEach(s => { s.kill = vi.fn() })
+
+    killAllTerminals()
+    sessions.forEach(s => expect(s.kill).toHaveBeenCalled())
+  })
+})

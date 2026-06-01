@@ -4,15 +4,15 @@ import { existsSync, readdirSync, readFileSync, writeFileSync, lstatSync, watch 
 import { createHash } from 'crypto'
 import { fileURLToPath, pathToFileURL } from 'url'
 import which from 'which'
-import shellEnv from 'shell-env'
 import { register as registerSystemHandlers } from './ipc-system.js'
 import { register as registerSettingsHandlers } from './ipc-settings.js'
 import { register as registerAssetHandlers } from './ipc-assets.js'
 import { register as registerFilesystemHandlers, dispose as disposeFilesystemWatchers } from './ipc-filesystem.js'
-import { TerminalSession } from './terminal.js'
+import { register as registerTerminalHandlers, killAllTerminals } from './ipc-terminal.js'
 import { validateFilename, validateAndResolve, validateWithin, validateAssetPath } from './ipc-validation.js'
+import { SAFE_OPEN_EXTENSIONS, ALLOWED_APP_PATHS } from './security-constants.js'
 import si from 'systeminformation'
-import { sendToMainWindow, readJsonFile, ensureDir } from './ipc-helpers.js'
+import { readJsonFile, ensureDir, sendToMainWindow } from './ipc-helpers.js'
 import { logger } from './logger.js'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -152,23 +152,8 @@ writeFileSync(versionHistoryPath, JSON.stringify(versionHistory, null, 2))
 // --- Settings IPC (delegated to ipc-settings.js) ---
 registerSettingsHandlers(ipcMain, { settingsFile, defaultSettings, userData, writeFileSync, readJsonFile })
 
-const SAFE_OPEN_EXTENSIONS = [
-  // Original
-  '.txt', '.json', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.pdf', '.md', '.html', '.css', '.js', '.wav', '.mp3', '.ogg',
-  // Data
-  '.log', '.csv', '.tsv', '.xml', '.yaml', '.yml', '.toml', '.ini', '.cfg', '.conf',
-  // Media
-  '.svg', '.mp4', '.webm', '.mkv', '.avi', '.mov', '.flac', '.m4a', '.aac', '.opus', '.bmp', '.tiff', '.ico', '.avif',
-  // Documents
-  '.rtf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.odt', '.ods', '.odp',
-  // Archives
-  '.zip', '.tar', '.gz', '.bz2', '.xz', '.7z', '.rar',
-  // Web
-  '.jsx', '.tsx', '.ts', '.vue', '.svelte', '.astro', '.scss', '.less', '.sass',
-]
 // --- App API IPC ---
 ipcMain.handle('getAppVersion', () => app.getVersion())
-const ALLOWED_APP_PATHS = ['home', 'appData', 'userData', 'desktop', 'documents', 'downloads', 'temp', 'logs', 'crashDumps']
 ipcMain.handle('getAppPath', (_event, name) => {
   if (!ALLOWED_APP_PATHS.includes(name)) {
     throw new Error('Invalid path name: not allowed')
@@ -179,22 +164,6 @@ ipcMain.handle('quitApp', () => app.quit())
 ipcMain.handle('getDisplays', () => screen.getAllDisplays().map(d => ({ id: d.id, bounds: d.bounds, workArea: d.workArea })))
 ipcMain.handle('getClipboardText', () => clipboard.readText())
 ipcMain.handle('setClipboardText', (_event, text) => clipboard.writeText(text))
-ipcMain.handle('openPath', (_event, path) => {
-  const resolved = validateWithin(path, userData)
-  try {
-    const stat = lstatSync(resolved)
-    if (stat.isDirectory()) {
-      throw new Error('Cannot open directory')
-    }
-  } catch (e) {
-    if (e.code !== 'ENOENT') throw e
-  }
-  const ext = extname(resolved).toLowerCase()
-  if (ext && !SAFE_OPEN_EXTENSIONS.includes(ext)) {
-    throw new Error('File type not allowed')
-  }
-  return shell.openPath(resolved)
-})
 ipcMain.handle('toggleFullscreen', () => {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.setFullScreen(!mainWindow.isFullScreen())
@@ -226,116 +195,19 @@ registerAssetHandlers(ipcMain, {
 // --- Filesystem IPC (delegated to ipc-filesystem.js) ---
 registerFilesystemHandlers(ipcMain, {
   userData, readdirSync, lstatSync, readFileSync, writeFileSync,
-  watch, validateWithin, BrowserWindow
+  watch, validateWithin, validateFilename, BrowserWindow,
+  safeOpenExtensions: SAFE_OPEN_EXTENSIONS,
+  shell
 })
 
 // --- System information IPC (delegated to ipc-system.js) ---
 registerSystemHandlers(ipcMain, { si })
 
-// --- Terminal PTY management ---
-const terminals = new Map()
-let nextTerminalId = 0
+// --- Terminal PTY management (delegated to ipc-terminal.js) ---
 let mainWindow = null
-
-ipcMain.handle('terminal:create', async (_event, options) => {
-  const settings = readJsonFile(settingsFile, { ...defaultSettings })
-  let cleanEnv
-  try {
-    cleanEnv = await shellEnv(settings.shell)
-  } catch {
-    cleanEnv = { ...process.env }
-  }
-  Object.assign(cleanEnv, {
-    TERM: 'xterm-256color',
-    COLORTERM: 'truecolor',
-    TERM_PROGRAM: 'eDEX-UI',
-    TERM_PROGRAM_VERSION: app.getVersion()
-  })
-
-  // Trusted shell directories — resolved shell must be in one of these
-  const TRUSTED_SHELL_DIRS = [
-    '/bin/', '/usr/bin/', '/usr/local/bin/',
-    '/opt/homebrew/bin/',
-    '/run/current-system/sw/bin/',
-    '/snap/bin/',
-  ]
-  const TRUSTED_WINDOWS_SHELLS = ['powershell.exe', 'cmd.exe', 'pwsh.exe']
-  const ALLOWED_SHELL_NAMES = ['bash', 'sh', 'zsh', 'fish', 'powershell.exe', 'cmd.exe', 'pwsh.exe']
-
-  function isShellAllowed(resolvedPath) {
-    const base = basename(resolvedPath).toLowerCase()
-    if (TRUSTED_WINDOWS_SHELLS.includes(base)) return true
-    if (!TRUSTED_SHELL_DIRS.some(dir => resolvedPath.startsWith(dir))) return false
-    return ALLOWED_SHELL_NAMES.includes(base)
-  }
-
-  const requestedShell = options.shell || settings.shell;
-  const resolvedShell = await which(requestedShell).catch(() => null);
-  let shell = settings.shell; // default
-  if (resolvedShell && isShellAllowed(resolvedShell)) {
-    shell = resolvedShell;
-  } else {
-    const fallbackResolved = await which(settings.shell).catch(() => null);
-    if (fallbackResolved && isShellAllowed(fallbackResolved)) {
-      shell = fallbackResolved;
-    } else {
-      throw new Error('No allowed shell available: both requested and configured shells failed allowlist validation');
-    }
-  }
-
-  // Sanitize params - reject shell metacharacters and dangerous flags
-  const rawParams = options.params || settings.shellArgs || [];
-  for (const p of rawParams) {
-    // oxlint-disable-next-line no-control-regex — intentional for shell injection prevention
-    if (typeof p !== 'string' || /[;&|`$(){}!<>~'"\\]/u.test(p) || /\u000a|\u000d|\u0009|\u0000|#/u.test(p)) {
-      throw new Error('Invalid shell parameter: contains forbidden characters');
-    }
-    if (/^-[a-zA-Z]*[cC]$|^\/[cC]$|^--command([= ]|$)/.test(p)) {
-      throw new Error('Invalid shell parameter: -c flag not allowed');
-    }
-  }
-  const params = rawParams;
-  const id = nextTerminalId++
-  const session = new TerminalSession({
-    id,
-    shell,
-    params,
-    cwd: options.cwd ? validateWithin(options.cwd, userData) : settings.cwd,
-    env: cleanEnv,
-    ondata: (_id, data) => {
-      sendToMainWindow(mainWindow, 'terminal:data', { id, data })
-    },
-    onexit: (_id, exitCode, signal) => {
-      terminals.delete(id)
-      sendToMainWindow(mainWindow, 'terminal:exit', { id, exitCode, signal })
-    },
-    oncwd: (_id, cwd) => {
-      sendToMainWindow(mainWindow, 'terminal:cwd-changed', { id, cwd })
-    },
-    onprocess: (_id, proc) => {
-      sendToMainWindow(mainWindow, 'terminal:process-changed', { id, process: proc })
-    }
-  })
-  terminals.set(id, session)
-  return id
-})
-
-ipcMain.on('terminal:write', (_event, { id, data }) => {
-  const session = terminals.get(id)
-  if (session) session.write(data)
-})
-
-ipcMain.on('terminal:resize', (_event, { id, cols, rows }) => {
-  const session = terminals.get(id)
-  if (session) session.resize(cols, rows)
-})
-
-ipcMain.handle('terminal:kill', (_event, id) => {
-  const session = terminals.get(id)
-  if (session) {
-    session.kill()
-    terminals.delete(id)
-  }
+registerTerminalHandlers(ipcMain, {
+  userData, settingsFile, defaultSettings, readJsonFile, app,
+  getWindow: () => mainWindow
 })
 
 // --- Window creation ---
@@ -477,7 +349,5 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   globalShortcut.unregisterAll()
   disposeFilesystemWatchers()
-  for (const [, session] of terminals) {
-    try { session.kill() } catch (e) { console.warn('[before-quit] Failed to kill terminal session:', e.message) }
-  }
+  killAllTerminals()
 })

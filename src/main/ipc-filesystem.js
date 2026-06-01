@@ -2,9 +2,11 @@
 // the built-in filesystem browser which navigates arbitrary paths. Only null-byte
 // injection is blocked. readFile/writeFile remain restricted to userData.
 
+import { extname } from 'path'
+
 let fsWatchers = {}
 
-export function register(ipcMain, { userData, readdirSync, lstatSync, readFileSync, writeFileSync, watch, validateWithin, BrowserWindow }) {
+export function register(ipcMain, { userData, readdirSync, lstatSync, readFileSync, writeFileSync, watch, validateWithin, validateFilename, BrowserWindow, safeOpenExtensions, shell: electronShell }) {
   ipcMain.handle('readdir', (_event, dirPath) => {
     if (!dirPath) return []
     if (typeof dirPath !== 'string' || dirPath.includes('\0')) throw new Error('Invalid path')
@@ -44,6 +46,23 @@ export function register(ipcMain, { userData, readdirSync, lstatSync, readFileSy
   ipcMain.handle('writeFile', (_event, filePath, content) => {
     const resolved = validateWithin(filePath, userData)
     writeFileSync(resolved, content)
+  })
+
+  ipcMain.handle('openPath', (_event, path) => {
+    const resolved = validateWithin(path, userData)
+    try {
+      const stat = lstatSync(resolved)
+      if (stat.isDirectory()) {
+        throw new Error('Cannot open directory')
+      }
+    } catch (e) {
+      if (e.code !== 'ENOENT') throw e
+    }
+    const ext = extname(resolved).toLowerCase()
+    if (ext && !safeOpenExtensions.includes(ext)) {
+      throw new Error('File type not allowed')
+    }
+    return electronShell.openPath(resolved)
   })
 
   ipcMain.handle('watchDirectory', async (_event, dirPath) => {
