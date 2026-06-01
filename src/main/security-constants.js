@@ -16,6 +16,8 @@ export const SAFE_OPEN_EXTENSIONS = [
   '.jsx', '.tsx', '.ts', '.vue', '.svelte', '.astro', '.scss', '.less', '.sass',
 ]
 
+Object.freeze(SAFE_OPEN_EXTENSIONS)
+
 export const ALLOWED_APP_PATHS = ['home', 'appData', 'userData', 'desktop', 'documents', 'downloads', 'temp', 'logs', 'crashDumps']
 
 export const TRUSTED_SHELL_DIRS = [

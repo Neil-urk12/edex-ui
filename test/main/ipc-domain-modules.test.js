@@ -1308,3 +1308,20 @@ describe('ipc-terminal.js', () => {
     sessions.forEach(s => expect(s.kill).toHaveBeenCalled())
   })
 })
+
+// ============================================================
+// security-constants.js
+// ============================================================
+describe('security-constants.js', () => {
+  it('SAFE_OPEN_EXTENSIONS is frozen (immutable)', async () => {
+    const { SAFE_OPEN_EXTENSIONS } = await import('../../src/main/security-constants.js')
+    expect(Object.isFrozen(SAFE_OPEN_EXTENSIONS)).toBe(true)
+  })
+
+  it('SAFE_OPEN_EXTENSIONS cannot be mutated via push', async () => {
+    const { SAFE_OPEN_EXTENSIONS } = await import('../../src/main/security-constants.js')
+    const originalLength = SAFE_OPEN_EXTENSIONS.length
+    expect(() => { SAFE_OPEN_EXTENSIONS.push('.evil') }).toThrow()
+    expect(SAFE_OPEN_EXTENSIONS.length).toBe(originalLength)
+  })
+})

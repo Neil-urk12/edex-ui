@@ -6,7 +6,7 @@ import { extname } from 'path'
 
 let fsWatchers = {}
 
-export function register(ipcMain, { userData, readdirSync, lstatSync, readFileSync, writeFileSync, watch, validateWithin, validateFilename, BrowserWindow, safeOpenExtensions, shell: electronShell }) {
+export function register(ipcMain, { userData, readdirSync, lstatSync, readFileSync, writeFileSync, watch, validateWithin, BrowserWindow, safeOpenExtensions, shell: electronShell }) {
   ipcMain.handle('readdir', (_event, dirPath) => {
     if (!dirPath) return []
     if (typeof dirPath !== 'string' || dirPath.includes('\0')) throw new Error('Invalid path')

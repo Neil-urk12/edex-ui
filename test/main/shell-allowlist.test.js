@@ -340,38 +340,5 @@ describe('--command prefix forms (defense-in-depth)', () => {
         expect(fixedRegex.test('--commander')).toBe(false);
     });
 });
-
-describe('Shell name allowlist (defense-in-depth)', () => {
-    const TRUSTED_SHELL_DIRS = [
-        '/bin/', '/usr/bin/', '/usr/local/bin/',
-        '/opt/homebrew/bin/',
-        '/run/current-system/sw/bin/',
-        '/snap/bin/',
-    ];
-    const TRUSTED_WINDOWS_SHELLS = ['powershell.exe', 'cmd.exe', 'pwsh.exe'];
-    const ALLOWED_SHELL_NAMES = ['bash', 'sh', 'zsh', 'fish', 'powershell.exe', 'cmd.exe', 'pwsh.exe'];
-
-    function isShellAllowed(resolvedPath) {
-        const base = resolvedPath.split('/').pop().toLowerCase();
-        if (TRUSTED_WINDOWS_SHELLS.includes(base)) return true;
-        if (!TRUSTED_SHELL_DIRS.some(dir => resolvedPath.startsWith(dir))) return false;
-        return ALLOWED_SHELL_NAMES.includes(base);
-    }
-
-    it('accepts /bin/bash', () => {
-        expect(isShellAllowed('/bin/bash')).toBe(true);
-    });
-
-    it('accepts /usr/bin/zsh', () => {
-        expect(isShellAllowed('/usr/bin/zsh')).toBe(true);
-    });
-
-    it('rejects /bin/evil-binary (unknown binary in trusted dir)', () => {
-        expect(isShellAllowed('/bin/evil-binary')).toBe(false);
-    });
-
-    it('rejects /usr/bin/malware', () => {
-        expect(isShellAllowed('/usr/bin/malware')).toBe(false);
-    });
 });
-})
+

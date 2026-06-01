@@ -195,7 +195,7 @@ registerAssetHandlers(ipcMain, {
 // --- Filesystem IPC (delegated to ipc-filesystem.js) ---
 registerFilesystemHandlers(ipcMain, {
   userData, readdirSync, lstatSync, readFileSync, writeFileSync,
-  watch, validateWithin, validateFilename, BrowserWindow,
+  watch, validateWithin, BrowserWindow,
   safeOpenExtensions: SAFE_OPEN_EXTENSIONS,
   shell
 })
