@@ -1,15 +1,13 @@
 import { join } from 'path'
-import { readJsonFile } from './ipc-helpers.js'
+import { getSchemaKeys } from '../shared/settings-schema.js'
 
-const SETTINGS_ALLOWLIST = [
-  'keyboard', 'theme', 'termFontSize', 'audio', 'audioVolume', 'disableFeedbackAudio',
-  'clockHours', 'pingAddr', 'port', 'nointro', 'nocursor', 'forceFullscreen', 'allowWindowed',
-  'excludeThreadsFromToplist', 'hideDotfiles', 'fsListView', 'experimentalGlobeFeatures', 'experimentalFeatures'
-]
+// Keys blocked from IPC write — shell, shellArgs, cwd, env, username for security
+const UNSAVEABLE_KEYS = new Set(['shell', 'shellArgs', 'cwd', 'env', 'username'])
+const SETTINGS_ALLOWLIST = getSchemaKeys().filter(k => !UNSAVEABLE_KEYS.has(k))
 
-export function register(ipcMain, { settingsFile, defaultSettings, userData, writeFileSync }) {
+export function register(ipcMain, { settingsFile, defaultSettings, userData, writeFileSync, readJsonFile: readJson }) {
   ipcMain.handle('getSettings', () => {
-    const settings = readJsonFile(settingsFile, { ...defaultSettings })
+    const settings = readJson(settingsFile, { ...defaultSettings })
     settings.settingsDir = userData
     settings.themesPath = join(userData, 'themes')
     settings.kbLayoutPath = join(userData, 'keyboards')
@@ -19,7 +17,7 @@ export function register(ipcMain, { settingsFile, defaultSettings, userData, wri
 
   ipcMain.handle('saveSettings', (_event, partial) => {
     let settings = { ...defaultSettings }
-    Object.assign(settings, readJsonFile(settingsFile, {}))
+    Object.assign(settings, readJson(settingsFile, {}))
     if (partial && typeof partial === 'object') {
       for (const key of SETTINGS_ALLOWLIST) {
         if (Object.hasOwn(partial, key)) settings[key] = partial[key]

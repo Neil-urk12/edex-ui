@@ -150,7 +150,7 @@ if (!versionHistory[version]) {
 writeFileSync(versionHistoryPath, JSON.stringify(versionHistory, null, 2))
 
 // --- Settings IPC (delegated to ipc-settings.js) ---
-registerSettingsHandlers(ipcMain, { settingsFile, defaultSettings, userData, writeFileSync })
+registerSettingsHandlers(ipcMain, { settingsFile, defaultSettings, userData, writeFileSync, readJsonFile })
 
 const SAFE_OPEN_EXTENSIONS = [
   // Original

@@ -45,6 +45,13 @@ vi.mock('electron', () => ({
 // --- fs mock ---
 const mockReadFileSync = vi.fn(() => '{}')
 const mockWriteFileSync = vi.fn()
+const mockReadJsonFile = vi.fn((filePath, fallback = null) => {
+  try {
+    return JSON.parse(mockReadFileSync(filePath, 'utf-8'))
+  } catch {
+    return fallback
+  }
+})
 const mockReaddirSync = vi.fn(() => [])
 const mockLstatSync = vi.fn(() => ({
   isFile: () => true,
@@ -329,7 +336,7 @@ describe('ipc-settings.js', () => {
   it('registers getSettings and saveSettings handlers', () => {
     register(ipcMain, {
       settingsFile, defaultSettings, userData,
-      readFileSync: mockReadFileSync, writeFileSync: mockWriteFileSync,
+      readFileSync: mockReadFileSync, writeFileSync: mockWriteFileSync, readJsonFile: mockReadJsonFile,
     })
     expect(ipcMain.handle).toHaveBeenCalledWith('getSettings', expect.any(Function))
     expect(ipcMain.handle).toHaveBeenCalledWith('saveSettings', expect.any(Function))
@@ -340,7 +347,7 @@ describe('ipc-settings.js', () => {
       mockReadFileSync.mockReturnValue(JSON.stringify({ theme: 'tron', keyboard: 'en-US' }))
       register(ipcMain, {
         settingsFile, defaultSettings, userData,
-        readFileSync: mockReadFileSync, writeFileSync: mockWriteFileSync,
+        readFileSync: mockReadFileSync, writeFileSync: mockWriteFileSync, readJsonFile: mockReadJsonFile,
       })
       const handler = getHandler('getSettings')
       const result = await handler()
@@ -355,7 +362,7 @@ describe('ipc-settings.js', () => {
       mockReadFileSync.mockImplementation(() => { throw new Error('ENOENT') })
       register(ipcMain, {
         settingsFile, defaultSettings, userData,
-        readFileSync: mockReadFileSync, writeFileSync: mockWriteFileSync,
+        readFileSync: mockReadFileSync, writeFileSync: mockWriteFileSync, readJsonFile: mockReadJsonFile,
       })
       const handler = getHandler('getSettings')
       const result = await handler()
@@ -369,7 +376,7 @@ describe('ipc-settings.js', () => {
       mockReadFileSync.mockReturnValue(JSON.stringify({ theme: 'matrix', keyboard: 'fr-FR' }))
       register(ipcMain, {
         settingsFile, defaultSettings, userData,
-        readFileSync: mockReadFileSync, writeFileSync: mockWriteFileSync,
+        readFileSync: mockReadFileSync, writeFileSync: mockWriteFileSync, readJsonFile: mockReadJsonFile,
       })
       const handler = getHandler('getSettings')
       const result = await handler()
@@ -385,7 +392,7 @@ describe('ipc-settings.js', () => {
       mockReadFileSync.mockReturnValue(JSON.stringify({ theme: 'tron', shell: 'bash' }))
       register(ipcMain, {
         settingsFile, defaultSettings, userData,
-        readFileSync: mockReadFileSync, writeFileSync: mockWriteFileSync,
+        readFileSync: mockReadFileSync, writeFileSync: mockWriteFileSync, readJsonFile: mockReadJsonFile,
       })
       const handler = getHandler('saveSettings')
       const result = handler({}, { theme: 'matrix' })
@@ -398,7 +405,7 @@ describe('ipc-settings.js', () => {
       mockReadFileSync.mockReturnValue(JSON.stringify({ theme: 'tron', shell: 'bash' }))
       register(ipcMain, {
         settingsFile, defaultSettings, userData,
-        readFileSync: mockReadFileSync, writeFileSync: mockWriteFileSync,
+        readFileSync: mockReadFileSync, writeFileSync: mockWriteFileSync, readJsonFile: mockReadJsonFile,
       })
       const handler = getHandler('saveSettings')
       const result = handler({}, { shell: '/bin/sh', shellArgs: '-c "rm -rf /"' })
@@ -411,7 +418,7 @@ describe('ipc-settings.js', () => {
       mockReadFileSync.mockReturnValue(JSON.stringify({ theme: 'tron', cwd: userData }))
       register(ipcMain, {
         settingsFile, defaultSettings, userData,
-        readFileSync: mockReadFileSync, writeFileSync: mockWriteFileSync,
+        readFileSync: mockReadFileSync, writeFileSync: mockWriteFileSync, readJsonFile: mockReadJsonFile,
       })
       const handler = getHandler('saveSettings')
       const result = handler({}, { cwd: '/etc' })
@@ -423,7 +430,7 @@ describe('ipc-settings.js', () => {
       mockReadFileSync.mockReturnValue('{}')
       register(ipcMain, {
         settingsFile, defaultSettings, userData,
-        readFileSync: mockReadFileSync, writeFileSync: mockWriteFileSync,
+        readFileSync: mockReadFileSync, writeFileSync: mockWriteFileSync, readJsonFile: mockReadJsonFile,
       })
       const handler = getHandler('saveSettings')
       const result = handler({}, { maliciousKey: 'evil', theme: 'matrix' })
@@ -436,7 +443,7 @@ describe('ipc-settings.js', () => {
       mockReadFileSync.mockReturnValue('{}')
       register(ipcMain, {
         settingsFile, defaultSettings, userData,
-        readFileSync: mockReadFileSync, writeFileSync: mockWriteFileSync,
+        readFileSync: mockReadFileSync, writeFileSync: mockWriteFileSync, readJsonFile: mockReadJsonFile,
       })
       const handler = getHandler('saveSettings')
       const result = handler({}, {
@@ -458,7 +465,7 @@ describe('ipc-settings.js', () => {
       mockReadFileSync.mockReturnValue('{}')
       register(ipcMain, {
         settingsFile, defaultSettings, userData,
-        readFileSync: mockReadFileSync, writeFileSync: mockWriteFileSync,
+        readFileSync: mockReadFileSync, writeFileSync: mockWriteFileSync, readJsonFile: mockReadJsonFile,
       })
       const handler = getHandler('saveSettings')
       const result = handler({}, { '__proto__': { polluted: true }, 'constructor': 'evil', theme: 'matrix' })
@@ -471,7 +478,7 @@ describe('ipc-settings.js', () => {
       mockReadFileSync.mockReturnValue(JSON.stringify({ theme: 'tron' }))
       register(ipcMain, {
         settingsFile, defaultSettings, userData,
-        readFileSync: mockReadFileSync, writeFileSync: mockWriteFileSync,
+        readFileSync: mockReadFileSync, writeFileSync: mockWriteFileSync, readJsonFile: mockReadJsonFile,
       })
       const handler = getHandler('saveSettings')
 
@@ -486,7 +493,7 @@ describe('ipc-settings.js', () => {
       mockReadFileSync.mockReturnValue('{}')
       register(ipcMain, {
         settingsFile, defaultSettings, userData,
-        readFileSync: mockReadFileSync, writeFileSync: mockWriteFileSync,
+        readFileSync: mockReadFileSync, writeFileSync: mockWriteFileSync, readJsonFile: mockReadJsonFile,
       })
       const handler = getHandler('saveSettings')
       const safeUpdate = {

@@ -11,6 +11,9 @@ import { RAMwatcher } from './classes/ramwatcher.class.js';
 import { Terminal } from './classes/terminal.class.js';
 import { FilesystemDisplay } from './classes/filesystem.class.js';
 import { initSettings } from './state.js';
+import { SETTINGS_SCHEMA, getSchemaKeys } from '../shared/settings-schema.js';
+import { renderSettingsEditor, collectSettingsFromDOM } from './settings-editor.js';
+import { renderShortcutsHelp } from './shortcuts-editor.js';
 
 // CSS imports (Vite injects as <style> tags)
 import '../assets/css/augmented.css';
@@ -538,28 +541,22 @@ window.focusShellTab = number => {
 window.openSettings = async () => {
     if (document.getElementById("settingsEditor")) return;
 
-    let keyboards = '', themes = '', monitors = '';
+    const keyboards = [], themes = [];
 
     const kbFiles = await window.electronAPI.readdir(await window.electronAPI.getAppPath('userData') + '/keyboards');
     kbFiles.forEach(kb => {
         if (!kb.endsWith(".json")) return;
-        kb = kb.replace(".json", "");
-        if (kb === window.settings.keyboard) return;
-        keyboards += `<option>${kb}</option>`;
+        keyboards.push(kb.replace(".json", ""));
     });
 
     const thFiles = await window.electronAPI.readdir(await window.electronAPI.getAppPath('userData') + '/themes');
     thFiles.forEach(th => {
         if (!th.endsWith(".json")) return;
-        th = th.replace(".json", "");
-        if (th === window.settings.theme) return;
-        themes += `<option>${th}</option>`;
+        themes.push(th.replace(".json", ""));
     });
 
-    const displays = await window.electronAPI.getDisplays();
-    for (let d = 0; d < displays.length; d++) {
-        if (d !== window.settings.monitor) monitors += `<option>${d}</option>`;
-    }
+    const monitorList = await window.electronAPI.getDisplays();
+    const displays = monitorList.map((_, i) => i);
 
     // Unlink the tactile keyboard from the terminal emulator
     window.keyboard.detach();
@@ -568,155 +565,7 @@ window.openSettings = async () => {
         type: "custom",
         title: `Settings <i>(v${appVersion})</i>`,
         rawHtml: true,
-        html: `<table id="settingsEditor">
-                    <tr>
-                        <th>Key</th>
-                        <th>Description</th>
-                        <th>Value</th>
-                    </tr>
-                    <tr>
-                        <td>shell</td>
-                        <td>The program to run as a terminal emulator</td>
-                        <td><input type="text" id="settingsEditor-shell" value="${escapeHtml(window.settings.shell)}"></td>
-                    </tr>
-                    <tr>
-                        <td>shellArgs</td>
-                        <td>Arguments to pass to the shell</td>
-                        <td><input type="text" id="settingsEditor-shellArgs" value="${escapeHtml(String(window.settings.shellArgs || ''))}"></td>
-                    </tr>
-                    <tr>
-                        <td>cwd</td>
-                        <td>Working Directory to start in</td>
-                        <td><input type="text" id="settingsEditor-cwd" value="${escapeHtml(window.settings.cwd)}"></td>
-                    </tr>
-                    <tr>
-                        <td>env</td>
-                        <td>Custom shell environment override</td>
-                        <td><input type="text" id="settingsEditor-env" value="${escapeHtml(String(window.settings.env || ''))}"></td>
-                    </tr>
-                    <tr>
-                        <td>username</td>
-                        <td>Custom username to display at boot</td>
-                        <td><input type="text" id="settingsEditor-username" value="${escapeHtml(window.settings.username)}"></td>
-                    </tr>
-                    <tr>
-                        <td>keyboard</td>
-                        <td>On-screen keyboard layout code</td>
-                        <td><select id="settingsEditor-keyboard">
-                            <option>${window.settings.keyboard}</option>
-                            ${keyboards}
-                        </select></td>
-                    </tr>
-                    <tr>
-                        <td>theme</td>
-                        <td>Name of the theme to load</td>
-                        <td><select id="settingsEditor-theme">
-                            <option>${window.settings.theme}</option>
-                            ${themes}
-                        </select></td>
-                    </tr>
-                    <tr>
-                        <td>termFontSize</td>
-                        <td>Size of the terminal text in pixels</td>
-                        <td><input type="number" id="settingsEditor-termFontSize" value="${window.settings.termFontSize}"></td>
-                    </tr>
-                    <tr>
-                        <td>audio</td>
-                        <td>Activate audio sound effects</td>
-                        <td><select id="settingsEditor-audio">
-                            <option>${window.settings.audio}</option>
-                            <option>${!window.settings.audio}</option>
-                        </select></td>
-                    </tr>
-                    <tr>
-                        <td>audioVolume</td>
-                        <td>Set default volume for sound effects (0.0 - 1.0)</td>
-                        <td><input type="number" id="settingsEditor-audioVolume" value="${window.settings.audioVolume || '1.0'}"></td>
-                    </tr>
-                    <tr>
-                        <td>disableFeedbackAudio</td>
-                        <td>Disable recurring feedback sound FX</td>
-                        <td><select id="settingsEditor-disableFeedbackAudio">
-                            <option>${window.settings.disableFeedbackAudio}</option>
-                            <option>${!window.settings.disableFeedbackAudio}</option>
-                        </select></td>
-                    </tr>
-                    <tr>
-                        <td>port</td>
-                        <td>Local port to use for UI-shell connection</td>
-                        <td><input type="number" id="settingsEditor-port" value="${window.settings.port}"></td>
-                    </tr>
-                    <tr>
-                        <td>pingAddr</td>
-                        <td>IPv4 address to test Internet connectivity</td>
-                        <td><input type="text" id="settingsEditor-pingAddr" value="${window.settings.pingAddr || "1.1.1.1"}"></td>
-                    </tr>
-                    <tr>
-                        <td>clockHours</td>
-                        <td>Clock format (12/24 hours)</td>
-                        <td><select id="settingsEditor-clockHours">
-                            <option>${(window.settings.clockHours === 12) ? "12" : "24"}</option>
-                            <option>${(window.settings.clockHours === 12) ? "24" : "12"}</option>
-                        </select></td>
-                    <tr>
-                        <td>monitor</td>
-                        <td>Which monitor to spawn the UI in</td>
-                        <td><select id="settingsEditor-monitor">
-                            ${(typeof window.settings.monitor !== "undefined") ? "<option>" + window.settings.monitor + "</option>" : ""}
-                            ${monitors}
-                        </select></td>
-                    </tr>
-                    <tr>
-                        <td>nointro</td>
-                        <td>Skip the intro boot log and logo${(window.settings.nointroOverride) ? " (Currently overridden by CLI flag)" : ""}</td>
-                        <td><select id="settingsEditor-nointro">
-                            <option>${window.settings.nointro}</option>
-                            <option>${!window.settings.nointro}</option>
-                        </select></td>
-                    </tr>
-                    <tr>
-                        <td>nocursor</td>
-                        <td>Hide the mouse cursor${(window.settings.nocursorOverride) ? " (Currently overridden by CLI flag)" : ""}</td>
-                        <td><select id="settingsEditor-nocursor">
-                            <option>${window.settings.nocursor}</option>
-                            <option>${!window.settings.nocursor}</option>
-                        </select></td>
-                    </tr>
-                    <tr>
-                        <td>allowWindowed</td>
-                        <td>Allow using F11 key to set the UI in windowed mode</td>
-                        <td><select id="settingsEditor-allowWindowed">
-                            <option>${window.settings.allowWindowed}</option>
-                            <option>${!window.settings.allowWindowed}</option>
-                        </select></td>
-                    </tr>
-                    <tr>
-                        <td>keepGeometry</td>
-                        <td>Try to keep a 16:9 aspect ratio in windowed mode</td>
-                        <td><select id="settingsEditor-keepGeometry">
-                            <option>${(window.settings.keepGeometry === false) ? 'false' : 'true'}</option>
-                            <option>${(window.settings.keepGeometry === false) ? 'true' : 'false'}</option>
-                        </select></td>
-                    </tr>
-                    <tr>
-                        <td>hideDotfiles</td>
-                        <td>Hide files and directories starting with a dot</td>
-                        <td><select id="settingsEditor-hideDotfiles">
-                            <option>${window.settings.hideDotfiles}</option>
-                            <option>${!window.settings.hideDotfiles}</option>
-                        </select></td>
-                    </tr>
-                    <tr>
-                        <td>fsListView</td>
-                        <td>Show files in a detailed list instead of icon grid</td>
-                        <td><select id="settingsEditor-fsListView">
-                            <option>${window.settings.fsListView}</option>
-                            <option>${!window.settings.fsListView}</option>
-                        </select></td>
-                    </tr>
-                </table>
-                <h6 id="settingsEditorStatus">Loaded values from memory</h6>
-                <br>`,
+        html: renderSettingsEditor(SETTINGS_SCHEMA, window.settings, { themes, keyboards, displays }),
         buttons: [
             { label: "Save to Disk", action: "writeSettings" },
             { label: "Reload UI", action: "reload" }
@@ -738,35 +587,8 @@ window.writeFile = async (filePath) => {
 };
 
 window.writeSettingsFile = async () => {
-    window.settings = {
-        shell: document.getElementById("settingsEditor-shell").value,
-        shellArgs: document.getElementById("settingsEditor-shellArgs").value,
-        cwd: document.getElementById("settingsEditor-cwd").value,
-        env: document.getElementById("settingsEditor-env").value,
-        username: document.getElementById("settingsEditor-username").value,
-        keyboard: document.getElementById("settingsEditor-keyboard").value,
-        theme: document.getElementById("settingsEditor-theme").value,
-        termFontSize: Number(document.getElementById("settingsEditor-termFontSize").value),
-        audio: (document.getElementById("settingsEditor-audio").value === "true"),
-        audioVolume: Number(document.getElementById("settingsEditor-audioVolume").value),
-        disableFeedbackAudio: (document.getElementById("settingsEditor-disableFeedbackAudio").value === "true"),
-        pingAddr: document.getElementById("settingsEditor-pingAddr").value,
-        clockHours: Number(document.getElementById("settingsEditor-clockHours").value),
-        port: Number(document.getElementById("settingsEditor-port").value),
-        monitor: Number(document.getElementById("settingsEditor-monitor").value),
-        nointro: (document.getElementById("settingsEditor-nointro").value === "true"),
-        nocursor: (document.getElementById("settingsEditor-nocursor").value === "true"),
-        allowWindowed: (document.getElementById("settingsEditor-allowWindowed").value === "true"),
-        keepGeometry: (document.getElementById("settingsEditor-keepGeometry").value === "true"),
-        hideDotfiles: (document.getElementById("settingsEditor-hideDotfiles").value === "true"),
-        fsListView: (document.getElementById("settingsEditor-fsListView").value === "true")
-    };
-
-    Object.keys(window.settings).forEach(key => {
-        if (window.settings[key] === "undefined") {
-            delete window.settings[key];
-        }
-    });
+    const collected = collectSettingsFromDOM(SETTINGS_SCHEMA);
+    Object.assign(window.settings, collected);
 
     await window.electronAPI.saveSettings(window.settings);
     document.getElementById("settingsEditorStatus").innerText = "New values written to settings.json file at " + new Date().toTimeString();
@@ -777,79 +599,18 @@ window.toggleFullScreen = async () => {
     await window.electronAPI.toggleFullscreen();
 };
 
-// Shortcuts help
 window.openShortcutsHelp = () => {
     if (document.getElementById("settingsEditor")) return;
 
-    const shortcutsDefinition = {
-        "COPY": "Copy selected buffer from the terminal.",
-        "PASTE": "Paste system clipboard to the terminal.",
-        "NEXT_TAB": "Switch to the next opened terminal tab.",
-        "PREVIOUS_TAB": "Switch to the previous opened terminal tab.",
-        "TAB_X": "Switch to terminal tab <strong>X</strong>, or create it.",
-        "SETTINGS": "Open the settings editor.",
-        "SHORTCUTS": "List and edit available keyboard shortcuts.",
-        "FUZZY_SEARCH": "Search for entries in the current working directory.",
-        "FS_LIST_VIEW": "Toggle between list and grid view in the file browser.",
-        "FS_DOTFILES": "Toggle hidden files and directories.",
-        "KB_PASSMODE": "Toggle password mode on the on-screen keyboard.",
-        "DEV_DEBUG": "Open Chromium Dev Tools.",
-        "DEV_RELOAD": "Trigger front-end hot reload."
-    };
-
-    let appList = "";
-    window.shortcuts.filter(e => e.type === "app").forEach(cut => {
-        let action = (cut.action.startsWith("TAB_")) ? "TAB_X" : cut.action;
-        appList += `<tr>
-                        <td>${(cut.enabled) ? 'YES' : 'NO'}</td>
-                        <td><input disabled type="text" maxlength=25 value="${escapeHtml(cut.trigger)}"></td>
-                        <td>${shortcutsDefinition[action]}</td>
-                    </tr>`;
-    });
-
-    let customList = "";
-    window.shortcuts.filter(e => e.type === "shell").forEach(cut => {
-        customList += `<tr>
-                            <td>${(cut.enabled) ? 'YES' : 'NO'}</td>
-                            <td><input disabled type="text" maxlength=25 value="${escapeHtml(cut.trigger)}"></td>
-                            <td>
-                                <input disabled type="text" placeholder="Run terminal command..." value="${escapeHtml(cut.action)}">
-                                <input disabled type="checkbox" name="shortcutsHelpNew_Enter" ${(cut.linebreak) ? 'checked' : ''}>
-                                <label for="shortcutsHelpNew_Enter">Enter</label>
-                            </td>
-                        </tr>`;
-    });
-
     window.keyboard.detach();
+
+    const { html } = renderShortcutsHelp(window.shortcuts, appVersion);
+
     new Modal({
         type: "custom",
         title: `Available Keyboard Shortcuts <i>(v${appVersion})</i>`,
         rawHtml: true,
-        html: `<h5>Using either the on-screen or a physical keyboard, you can use the following shortcuts:</h5>
-                <details open id="shortcutsHelpAccordeon1">
-                    <summary>Emulator shortcuts</summary>
-                    <table class="shortcutsHelp">
-                        <tr>
-                            <th>Enabled</th>
-                            <th>Trigger</th>
-                            <th>Action</th>
-                        </tr>
-                        ${appList}
-                    </table>
-                </details>
-                <br>
-                <details id="shortcutsHelpAccordeon2">
-                    <summary>Custom command shortcuts</summary>
-                    <table class="shortcutsHelp">
-                        <tr>
-                            <th>Enabled</th>
-                            <th>Trigger</th>
-                            <th>Command</th>
-                        <tr>
-                       ${customList}
-                    </table>
-                </details>
-                <br>`,
+        html: html,
         buttons: [
             { label: "Reload UI", action: "reload" }
         ]
